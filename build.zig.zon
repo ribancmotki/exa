@@ -1,0 +1,14 @@
+.{
+    .name = "search-platform",
+    .version = "0.1.0",
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{},
+    .paths = .{
+        "src/",
+        "sql/",
+        "tests/",
+        "build.zig",
+        "build.zig.zon",
+        "SPEC.md",
+    },
+}

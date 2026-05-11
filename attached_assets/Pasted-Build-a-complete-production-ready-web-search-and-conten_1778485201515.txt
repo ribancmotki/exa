@@ -1,0 +1,2146 @@
+Build a complete, production-ready web search and content intelligence platform with a Zig HTTP backend, a PostgreSQL database, a Redis cache layer, and full REST API surface. Every file must be written in complete, unabridged, production-ready code with zero placeholders, zero stubs, and zero mock implementations. The system must be deployable as a standalone binary produced by the Zig compiler targeting Linux x86_64.
+
+---
+
+ 1. PROJECT STRUCTURE
+
+Create the following directory tree in its entirety:
+
+
+/
+├── build.zig
+├── build.zig.zon
+├── src/
+│   ├── main.zig
+│   ├── config.zig
+│   ├── server.zig
+│   ├── router.zig
+│   ├── middleware/
+│   │   ├── auth.zig
+│   │   ├── rate_limiter.zig
+│   │   ├── cors.zig
+│   │   └── logger.zig
+│   ├── db/
+│   │   ├── pool.zig
+│   │   ├── migrations.zig
+│   │   └── queries.zig
+│   ├── cache/
+│   │   └── redis.zig
+│   ├── handlers/
+│   │   ├── search.zig
+│   │   ├── contents.zig
+│   │   ├── answer.zig
+│   │   ├── research.zig
+│   │   ├── monitors.zig
+│   │   ├── websets.zig
+│   │   ├── team_management.zig
+│   │   └── health.zig
+│   ├── search/
+│   │   ├── engine.zig
+│   │   ├── neural.zig
+│   │   ├── keyword.zig
+│   │   ├── auto.zig
+│   │   ├── fast.zig
+│   │   ├── instant.zig
+│   │   ├── deep.zig
+│   │   ├── deep_lite.zig
+│   │   ├── deep_reasoning.zig
+│   │   ├── reranker.zig
+│   │   ├── embeddings.zig
+│   │   ├── category_filter.zig
+│   │   └── query_expansion.zig
+│   ├── contents/
+│   │   ├── crawler.zig
+│   │   ├── livecrawl.zig
+│   │   ├── parser.zig
+│   │   ├── markdown.zig
+│   │   ├── highlights.zig
+│   │   ├── summary.zig
+│   │   ├── subpages.zig
+│   │   └── freshness.zig
+│   ├── llm/
+│   │   ├── client.zig
+│   │   ├── anthropic.zig
+│   │   ├── streaming.zig
+│   │   └── structured_output.zig
+│   ├── index/
+│   │   ├── document.zig
+│   │   ├── inverted.zig
+│   │   ├── vector_store.zig
+│   │   └── hnsw.zig
+│   ├── monitors/
+│   │   ├── scheduler.zig
+│   │   ├── runner.zig
+│   │   └── dedup.zig
+│   ├── websets/
+│   │   ├── webset.zig
+│   │   ├── search_agent.zig
+│   │   ├── enrichment_agent.zig
+│   │   ├── verification.zig
+│   │   ├── items.zig
+│   │   ├── imports.zig
+│   │   └── exports.zig
+│   ├── webhooks/
+│   │   ├── dispatcher.zig
+│   │   ├── signer.zig
+│   │   └── retry.zig
+│   ├── billing/
+│   │   ├── metering.zig
+│   │   ├── credits.zig
+│   │   └── pricing.zig
+│   ├── types/
+│   │   ├── search.zig
+│   │   ├── contents.zig
+│   │   ├── answer.zig
+│   │   ├── research.zig
+│   │   ├── monitor.zig
+│   │   ├── webset.zig
+│   │   ├── webhook.zig
+│   │   ├── event.zig
+│   │   ├── errors.zig
+│   │   └── common.zig
+│   ├── utils/
+│   │   ├── json.zig
+│   │   ├── uuid.zig
+│   │   ├── crypto.zig
+│   │   ├── http_client.zig
+│   │   ├── pool.zig
+│   │   └── time.zig
+│   └── mcp/
+│       ├── server.zig
+│       ├── tools.zig
+│       └── protocol.zig
+├── sql/
+│   ├── 001_initial.sql
+│   ├── 002_indexes.sql
+│   ├── 003_monitors.sql
+│   ├── 004_websets.sql
+│   ├── 005_billing.sql
+│   ├── 006_events.sql
+│   └── 007_api_keys.sql
+└── tests/
+    ├── search_test.zig
+    ├── contents_test.zig
+    ├── monitor_test.zig
+    ├── webset_test.zig
+    └── billing_test.zig
+
+
+---
+
+ 2. BUILD SYSTEM
+
+ build.zig
+
+Write a complete build.zig that:
+- Targets linux-x86_64 with ReleaseFast optimization for production and Debug for tests.
+- Links against libpq (PostgreSQL C client library) via addSystemLibrary("pq").
+- Links against libhiredis (Redis C client) via addSystemLibrary("hiredis").
+- Links against libssl and libcrypto (OpenSSL) for TLS in the HTTP client.
+- Links against libz for gzip decompression of crawled content.
+- Adds src/main.zig as the root source for the executable named search-platform.
+- Registers all test files under tests/ as test steps.
+- Sets exe.linkLibC() so that all C library linkage resolves correctly.
+- Passes the build-time version string 0.1.0 as an options value accessible from src/config.zig.
+
+ build.zig.zon
+
+Write a complete build.zig.zon manifest declaring:
+- name: "search-platform"
+- version: "0.1.0"
+- minimum_zig_version: "0.14.0"
+- No external package dependencies (all external code is linked as system libraries).
+
+---
+
+ 3. CONFIGURATION — src/config.zig
+
+Define a Config struct with all of the following fields, all populated from environment variables read at startup via std.process.getEnvMap. Every field has a documented default and a hard error if a required field is missing:
+
+
+listen_host: []const u8          // default "0.0.0.0"
+listen_port: u16                 // default 8080
+postgres_dsn: []const u8         // required, e.g. "postgres://user:pass@host/db"
+redis_url: []const u8            // required, e.g. "redis://localhost:6379"
+anthropic_api_key: []const u8   // required for LLM calls
+embedding_model_url: []const u8 // URL of embedding inference server (OpenAI-compatible)
+embedding_model_name: []const u8 // e.g. "text-embedding-3-small"
+embedding_dim: usize             // default 1536
+reranker_url: []const u8        // URL of cross-encoder reranker REST endpoint
+crawler_timeout_ms: u64          // default 10000
+crawler_max_body_bytes: usize    // default 5_242_880 (5 MiB)
+crawler_user_agent: []const u8  // default "SearchPlatformBot/0.1"
+max_search_results: usize        // default 100
+default_search_results: usize   // default 10
+max_highlights_chars: usize      // default 8000
+rate_limit_qps: u32              // default 10 per API key
+rate_limit_burst: u32            // default 20
+webhook_signing_secret_length: usize // default 32 bytes
+webhook_delivery_timeout_ms: u64 // default 5000
+webhook_max_retries: u8          // default 5
+monitor_min_interval_hours: u32  // default 1
+credit_search_auto_cents: u32    // default 700 (= $0.007)
+credit_search_fast_cents: u32    // default 700
+credit_search_instant_cents: u32 // default 700
+credit_search_deep_lite_cents: u32 // default 1200
+credit_search_deep_cents: u32    // default 1200
+credit_search_deep_reasoning_cents: u32 // default 1500
+credit_contents_per_page_cents: u32 // default 100
+credit_summary_per_page_cents: u32  // default 100
+credit_answer_cents: u32         // default 500
+log_level: []const u8            // default "info"
+mcp_listen_port: u16             // default 3000
+worker_threads: usize            // default std.Thread.getCpuCount()
+db_pool_size: usize              // default 16
+index_data_dir: []const u8      // path to on-disk HNSW index files
+
+
+Implement Config.load(allocator) which reads all variables, validates them, and returns a fully populated Config or an error with a descriptive message including which variable is missing or malformed.
+
+---
+
+ 4. DATABASE LAYER
+
+ sql/001_initial.sql
+
+Write the complete schema for these tables:
+
+**api_keys**
+sql
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+team_id UUID NOT NULL,
+name TEXT,
+key_hash BYTEA NOT NULL UNIQUE,           -- SHA-256 of the raw key
+key_prefix CHAR(8) NOT NULL,              -- first 8 chars for display
+rate_limit_qps INTEGER,                   -- NULL means use team default
+budget_cents BIGINT,                      -- NULL means unlimited
+spent_cents BIGINT NOT NULL DEFAULT 0,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+revoked_at TIMESTAMPTZ
+
+
+**teams**
+sql
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+name TEXT NOT NULL,
+credit_balance_cents BIGINT NOT NULL DEFAULT 0,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+
+**documents**
+sql
+id TEXT PRIMARY KEY,                      -- normalized URL used as doc ID
+url TEXT NOT NULL,
+title TEXT,
+author TEXT,
+published_at TIMESTAMPTZ,
+crawled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+body_text TEXT,                           -- full markdown-cleaned text
+body_html TEXT,                           -- raw HTML before cleaning
+embedding VECTOR(1536),                   -- pgvector column
+content_hash BYTEA,                       -- SHA-256 of body_text
+domain TEXT NOT NULL,
+language CHAR(10),
+favicon_url TEXT,
+image_url TEXT,
+word_count INTEGER
+
+
+**search_requests**
+sql
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+api_key_id UUID REFERENCES api_keys(id),
+team_id UUID REFERENCES teams(id),
+query TEXT NOT NULL,
+search_type TEXT NOT NULL,
+num_results INTEGER NOT NULL,
+category TEXT,
+cost_cents INTEGER NOT NULL DEFAULT 0,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+duration_ms INTEGER
+
+
+**content_requests**
+sql
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+api_key_id UUID REFERENCES api_keys(id),
+team_id UUID REFERENCES teams(id),
+url TEXT NOT NULL,
+cost_cents INTEGER NOT NULL DEFAULT 0,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+
+ sql/002_indexes.sql
+
+Create the following indexes:
+- CREATE INDEX idx_documents_domain ON documents(domain) 
+- CREATE INDEX idx_documents_published_at ON documents(published_at DESC NULLS LAST)
+- CREATE INDEX idx_documents_crawled_at ON documents(crawled_at DESC)
+- CREATE INDEX idx_documents_language ON documents(language)
+- CREATE INDEX idx_api_keys_team ON api_keys(team_id)
+- CREATE INDEX idx_api_keys_hash ON api_keys(key_hash)
+- A GIN index for full-text search on documents.body_text using to_tsvector('english', body_text)
+- An HNSW index on documents.embedding using vector_cosine_ops with m=16, ef_construction=64
+
+ sql/003_monitors.sql
+
+sql
+CREATE TABLE monitors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id),
+    name TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','disabled')),
+    search_config JSONB NOT NULL,
+    trigger_config JSONB,
+    output_schema JSONB,
+    metadata JSONB,
+    webhook_url TEXT NOT NULL,
+    webhook_events TEXT[] NOT NULL DEFAULT '{}',
+    webhook_secret BYTEA NOT NULL,
+    next_run_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE monitor_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    monitor_id UUID NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed','cancelled')),
+    output JSONB,
+    fail_reason TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ,
+    duration_ms INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_monitors_team ON monitors(team_id);
+CREATE INDEX idx_monitors_next_run ON monitors(next_run_at) WHERE status = 'active';
+CREATE INDEX idx_monitor_runs_monitor ON monitor_runs(monitor_id, created_at DESC);
+
+
+ sql/004_websets.sql
+
+sql
+CREATE TABLE websets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id),
+    external_id TEXT,
+    status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','idle','paused')),
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (team_id, external_id)
+);
+
+CREATE TABLE webset_searches (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    webset_id UUID NOT NULL REFERENCES websets(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created','running','completed','canceled')),
+    query TEXT NOT NULL,
+    entity_type TEXT,
+    entity_description TEXT,
+    criteria JSONB NOT NULL DEFAULT '[]',
+    count INTEGER NOT NULL DEFAULT 10,
+    max_people_per_company INTEGER,
+    behaviour TEXT NOT NULL DEFAULT 'override',
+    progress_found INTEGER NOT NULL DEFAULT 0,
+    progress_completion NUMERIC(5,2) NOT NULL DEFAULT 0,
+    metadata JSONB,
+    canceled_at TIMESTAMPTZ,
+    canceled_reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE webset_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    webset_id UUID NOT NULL REFERENCES websets(id) ON DELETE CASCADE,
+    source TEXT NOT NULL DEFAULT 'search',
+    source_id UUID,
+    properties JSONB NOT NULL,
+    evaluations JSONB NOT NULL DEFAULT '[]',
+    enrichments JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE webset_enrichments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    webset_id UUID NOT NULL REFERENCES websets(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','completed','canceled')),
+    title TEXT,
+    description TEXT NOT NULL,
+    format TEXT,
+    options JSONB,
+    instructions TEXT,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE webset_exports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    webset_id UUID NOT NULL REFERENCES websets(id) ON DELETE CASCADE,
+    format TEXT NOT NULL DEFAULT 'csv',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','completed','failed')),
+    download_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE webset_imports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    webset_id UUID REFERENCES websets(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL REFERENCES teams(id),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    upload_url TEXT,
+    upload_valid_until TIMESTAMPTZ,
+    total_urls INTEGER,
+    processed_urls INTEGER NOT NULL DEFAULT 0,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_websets_team ON websets(team_id);
+CREATE INDEX idx_webset_searches_webset ON webset_searches(webset_id);
+CREATE INDEX idx_webset_items_webset ON webset_items(webset_id, created_at DESC);
+CREATE INDEX idx_webset_enrichments_webset ON webset_enrichments(webset_id);
+
+
+ sql/005_billing.sql
+
+sql
+CREATE TABLE billing_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id),
+    api_key_id UUID REFERENCES api_keys(id),
+    event_type TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    description TEXT,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_billing_team_created ON billing_events(team_id, created_at DESC);
+CREATE INDEX idx_billing_api_key ON billing_events(api_key_id, created_at DESC);
+
+
+ sql/006_events.sql
+
+sql
+CREATE TABLE platform_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id),
+    type TEXT NOT NULL,
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_platform_events_team ON platform_events(team_id, created_at DESC);
+CREATE INDEX idx_platform_events_type ON platform_events(team_id, type, created_at DESC);
+
+-- auto-delete after 60 days
+CREATE OR REPLACE FUNCTION delete_old_events() RETURNS void AS $$
+BEGIN
+  DELETE FROM platform_events WHERE created_at < now() - INTERVAL '60 days';
+END;
+$$ LANGUAGE plpgsql;
+
+
+ sql/007_api_keys.sql
+
+sql
+CREATE TABLE api_key_usage_daily (
+    api_key_id UUID NOT NULL REFERENCES api_keys(id),
+    date DATE NOT NULL,
+    total_requests INTEGER NOT NULL DEFAULT 0,
+    total_cost_cents BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (api_key_id, date)
+);
+
+CREATE INDEX idx_usage_daily_key_date ON api_key_usage_daily(api_key_id, date DESC);
+
+
+---
+
+ 5. TYPES — src/types/
+
+ src/types/common.zig
+
+Define:
+zig
+pub const PaginatedResponse = struct {
+    has_more: bool,
+    next_cursor: ?[]const u8,
+};
+
+pub const CostDollars = struct {
+    total: f64,
+    search: ?SearchCost,
+    contents: ?ContentsCost,
+
+    pub const SearchCost = struct {
+        neural: f64 = 0,
+        keyword: f64 = 0,
+    };
+    pub const ContentsCost = struct {
+        text: f64 = 0,
+        summary: f64 = 0,
+    };
+};
+
+pub const Reference = struct {
+    title: ?[]const u8,
+    snippet: ?[]const u8,
+    url: []const u8,
+};
+
+pub const ApiError = struct {
+    request_id: []const u8,
+    @"error": []const u8,
+    tag: []const u8,
+};
+
+
+ src/types/search.zig
+
+Define every type needed for the search request and response:
+
+zig
+pub const SearchType = enum {
+    auto,
+    fast,
+    instant,
+    @"deep-lite",
+    deep,
+    @"deep-reasoning",
+    neural,
+    keyword,
+};
+
+pub const Category = enum {
+    company,
+    @"research paper",
+    news,
+    @"personal site",
+    @"financial report",
+    people,
+    pdf,
+    github,
+};
+
+pub const TextContentsOptions = struct {
+    max_characters: ?usize = null,
+    include_html_tags: bool = false,
+    verbosity: Verbosity = .compact,
+    include_sections: ?[]const SectionTag = null,
+    exclude_sections: ?[]const SectionTag = null,
+
+    pub const Verbosity = enum { compact, standard, full };
+    pub const SectionTag = enum { header, navigation, banner, body, sidebar, footer, metadata };
+};
+
+pub const HighlightsContentsOptions = struct {
+    query: ?[]const u8 = null,
+    max_characters: ?usize = null,
+};
+
+pub const SummaryContentsOptions = struct {
+    query: ?[]const u8 = null,
+    schema: ?std.json.Value = null,
+};
+
+pub const ContextContentsOptions = struct {
+    max_characters: ?usize = null,
+};
+
+pub const ExtrasOptions = struct {
+    links: usize = 0,
+    image_links: usize = 0,
+};
+
+pub const ContentsOptions = struct {
+    text: ?union(enum) { enabled: bool, options: TextContentsOptions } = null,
+    highlights: ?union(enum) { enabled: bool, options: HighlightsContentsOptions } = null,
+    summary: ?union(enum) { enabled: bool, options: SummaryContentsOptions } = null,
+    context: ?union(enum) { enabled: bool, options: ContextContentsOptions } = null,
+    max_age_hours: ?i64 = null,
+    livecrawl_timeout: u64 = 10000,
+    subpages: usize = 0,
+    subpage_target: ?[]const []const u8 = null,
+    extras: ExtrasOptions = .{},
+    filter_empty_results: bool = true,
+};
+
+pub const SearchRequest = struct {
+    query: []const u8,
+    type: SearchType = .auto,
+    stream: bool = false,
+    num_results: usize = 10,
+    category: ?Category = null,
+    user_location: ?[]const u8 = null,
+    include_domains: ?[]const []const u8 = null,
+    exclude_domains: ?[]const []const u8 = null,
+    start_published_date: ?[]const u8 = null,
+    end_published_date: ?[]const u8 = null,
+    start_crawl_date: ?[]const u8 = null,
+    end_crawl_date: ?[]const u8 = null,
+    include_text: ?[]const []const u8 = null,
+    exclude_text: ?[]const []const u8 = null,
+    moderation: bool = false,
+    additional_queries: ?[]const []const u8 = null,
+    system_prompt: ?[]const u8 = null,
+    output_schema: ?std.json.Value = null,
+    contents: ?ContentsOptions = null,
+    flags: ?[]const []const u8 = null,
+};
+
+pub const SearchResult = struct {
+    title: ?[]const u8,
+    url: []const u8,
+    id: []const u8,
+    published_date: ?[]const u8,
+    author: ?[]const u8,
+    score: ?f32,
+    image: ?[]const u8,
+    favicon: ?[]const u8,
+    text: ?[]const u8,
+    highlights: ?[]const []const u8,
+    highlight_scores: ?[]const f32,
+    summary: ?[]const u8,
+    subpages: ?[]const SearchResult,
+    extras: ?ExtrasResult,
+    entities: ?[]const Entity,
+
+    pub const ExtrasResult = struct {
+        links: ?[]const []const u8,
+        image_links: ?[]const []const u8,
+    };
+};
+
+pub const DeepSearchOutputGroundingCitation = struct {
+    url: []const u8,
+    title: []const u8,
+};
+
+pub const DeepSearchOutputGrounding = struct {
+    field: []const u8,
+    citations: []const DeepSearchOutputGroundingCitation,
+    confidence: enum { low, medium, high },
+};
+
+pub const DeepSearchOutput = struct {
+    content: std.json.Value,
+    grounding: []const DeepSearchOutputGrounding,
+};
+
+pub const SearchResponse = struct {
+    request_id: []const u8,
+    search_type: ?[]const u8,
+    results: []const SearchResult,
+    output: ?DeepSearchOutput,
+    auto_date: ?[]const u8,
+    context: ?[]const u8,
+    statuses: ?[]const ContentStatus,
+    cost_dollars: CostDollars,
+    search_time: ?f64,
+};
+
+pub const ContentStatus = struct {
+    id: []const u8,
+    status: enum { success, @"error" },
+    @"error": ?ContentError,
+
+    pub const ContentError = struct {
+        tag: ContentErrorTag,
+        http_status_code: ?u16,
+
+        pub const ContentErrorTag = enum {
+            CRAWL_NOT_FOUND,
+            CRAWL_TIMEOUT,
+            CRAWL_LIVECRAWL_TIMEOUT,
+            SOURCE_NOT_AVAILABLE,
+            UNSUPPORTED_URL,
+            CRAWL_UNKNOWN_ERROR,
+        };
+    };
+};
+
+pub const Entity = union(enum) {
+    company: CompanyEntity,
+    person: PersonEntity,
+
+    pub const CompanyEntity = struct {
+        id: []const u8,
+        type: []const u8,
+        version: u32,
+        properties: CompanyProperties,
+
+        pub const CompanyProperties = struct {
+            name: ?[]const u8,
+            founded_year: ?u16,
+            description: ?[]const u8,
+            workforce: ?Workforce,
+            headquarters: ?Headquarters,
+            financials: ?Financials,
+            web_traffic: ?WebTraffic,
+
+            pub const Workforce = struct { total: ?u32 };
+            pub const Headquarters = struct {
+                address: ?[]const u8,
+                city: ?[]const u8,
+                postal_code: ?[]const u8,
+                country: ?[]const u8,
+            };
+            pub const FundingRound = struct {
+                name: ?[]const u8,
+                date: ?[]const u8,
+                amount: ?i64,
+            };
+            pub const Financials = struct {
+                revenue_annual: ?i64,
+                funding_total: ?i64,
+                funding_latest_round: ?FundingRound,
+            };
+            pub const WebTraffic = struct { total: ?u64 };
+        };
+    };
+
+    pub const PersonEntity = struct {
+        id: []const u8,
+        type: []const u8,
+        version: u32,
+        properties: PersonProperties,
+
+        pub const PersonProperties = struct {
+            name: ?[]const u8,
+            location: ?[]const u8,
+            work_history: ?[]const WorkHistoryEntry,
+
+            pub const WorkHistoryEntry = struct {
+                title: ?[]const u8,
+                location: ?[]const u8,
+                dates: ?DateRange,
+                company: ?CompanyRef,
+
+                pub const DateRange = struct {
+                    from_date: ?[]const u8,
+                    to_date: ?[]const u8,
+                };
+                pub const CompanyRef = struct {
+                    id: ?[]const u8,
+                    name: ?[]const u8,
+                };
+            };
+        };
+    };
+};
+
+
+ src/types/contents.zig
+
+Define the ContentsRequest and ContentsResponse types matching the /contents endpoint. Fields are top-level (not nested under contents). Include ContentsRequest.urls, ContentsRequest.text, ContentsRequest.highlights, ContentsRequest.summary, ContentsRequest.max_age_hours, ContentsRequest.livecrawl_timeout, ContentsRequest.subpages, ContentsRequest.subpage_target, ContentsRequest.extras. The response is ContentsResponse containing results: []SearchResult, statuses: []ContentStatus, cost_dollars: CostDollars.
+
+ src/types/answer.zig
+
+zig
+pub const AnswerRequest = struct {
+    query: []const u8,
+    stream: bool = false,
+    text: bool = false,
+    system_prompt: ?[]const u8 = null,
+    model: ?[]const u8 = null,
+    output_schema: ?std.json.Value = null,
+    user_location: ?[]const u8 = null,
+};
+
+pub const AnswerCitation = struct {
+    id: []const u8,
+    url: []const u8,
+    title: ?[]const u8,
+    published_date: ?[]const u8,
+    author: ?[]const u8,
+    text: ?[]const u8,
+};
+
+pub const AnswerResponse = struct {
+    answer: std.json.Value,
+    citations: []const AnswerCitation,
+    cost_dollars: CostDollars,
+};
+
+
+ src/types/research.zig
+
+zig
+pub const ResearchModel = enum {
+    @"exa-research-fast",
+    @"exa-research",
+    @"exa-research-pro",
+};
+
+pub const ResearchStatus = enum {
+    pending,
+    running,
+    completed,
+    canceled,
+    failed,
+};
+
+pub const ResearchCreateRequest = struct {
+    instructions: []const u8,
+    model: ResearchModel = .@"exa-research",
+    output_schema: ?std.json.Value = null,
+};
+
+pub const ResearchOutput = struct {
+    content: []const u8,
+    parsed: ?std.json.Value,
+};
+
+pub const ResearchDto = struct {
+    id: []const u8,
+    created_at: i64,
+    model: ResearchModel,
+    instructions: []const u8,
+    output_schema: ?std.json.Value,
+    status: ResearchStatus,
+    finished_at: ?i64,
+    output: ?ResearchOutput,
+    cost_dollars: ?CostDollars,
+    error_message: ?[]const u8,
+};
+
+pub const ListResearchResponse = struct {
+    data: []const ResearchDto,
+    has_more: bool,
+    next_cursor: ?[]const u8,
+};
+
+
+ src/types/monitor.zig
+
+zig
+pub const MonitorStatus = enum { active, paused, disabled };
+
+pub const TriggerConfig = struct {
+    type: []const u8,
+    period: []const u8,
+};
+
+pub const WebhookConfig = struct {
+    url: []const u8,
+    events: ?[]const []const u8,
+};
+
+pub const CreateMonitorRequest = struct {
+    name: ?[]const u8,
+    search: std.json.Value,
+    trigger: ?TriggerConfig,
+    output_schema: ?std.json.Value,
+    metadata: ?std.json.Value,
+    webhook: WebhookConfig,
+};
+
+pub const MonitorDto = struct {
+    id: []const u8,
+    name: ?[]const u8,
+    status: MonitorStatus,
+    search: std.json.Value,
+    trigger: ?TriggerConfig,
+    output_schema: ?std.json.Value,
+    metadata: ?std.json.Value,
+    webhook: WebhookConfig,
+    next_run_at: ?[]const u8,
+    created_at: []const u8,
+    updated_at: []const u8,
+    webhook_secret: ?[]const u8,
+};
+
+pub const RunStatus = enum { pending, running, completed, failed, cancelled };
+
+pub const RunOutput = struct {
+    results: []const std.json.Value,
+    content: ?std.json.Value,
+    grounding: ?[]const std.json.Value,
+};
+
+pub const RunDto = struct {
+    id: []const u8,
+    monitor_id: []const u8,
+    status: RunStatus,
+    output: ?RunOutput,
+    fail_reason: ?[]const u8,
+    started_at: ?[]const u8,
+    completed_at: ?[]const u8,
+    failed_at: ?[]const u8,
+    cancelled_at: ?[]const u8,
+    duration_ms: ?u64,
+    created_at: []const u8,
+    updated_at: []const u8,
+};
+
+pub const ListMonitorsResponse = struct {
+    data: []const MonitorDto,
+    has_more: bool,
+    next_cursor: ?[]const u8,
+};
+
+pub const ListRunsResponse = struct {
+    data: []const RunDto,
+    has_more: bool,
+    next_cursor: ?[]const u8,
+};
+
+
+ src/types/webset.zig
+
+Define all webset types as described in the SQL schema and the API reference: WebsetStatus, WebsetSearchStatus, WebsetEnrichmentStatus, WebsetEnrichmentFormat, EntityType, CreateWebsetRequest, WebsetDto, WebsetSearchDto, WebsetItemDto, WebsetEnrichmentDto, WebsetItemProperties (union over company/person/article/research_paper/custom), EnrichmentResult, WebsetItemEvaluation, Criterion, Progress, CreateWebsetSearchRequest, CreateEnrichmentRequest, ListWebsetsResponse, ListItemsResponse. Every field mirrors exactly what the SQL schema stores and what the REST API returns as JSON.
+
+ src/types/webhook.zig
+
+zig
+pub const WebhookStatus = enum { active, inactive };
+
+pub const EventType = enum {
+    @"webset.created",
+    @"webset.deleted",
+    @"webset.paused",
+    @"webset.idle",
+    @"webset.search.created",
+    @"webset.search.updated",
+    @"webset.search.completed",
+    @"webset.search.canceled",
+    @"webset.item.created",
+    @"webset.item.enriched",
+    @"webset.export.created",
+    @"webset.export.completed",
+    @"import.created",
+    @"import.completed",
+    @"monitor.created",
+    @"monitor.updated",
+    @"monitor.deleted",
+    @"monitor.run.created",
+    @"monitor.run.completed",
+    @"monitor.run.completed",
+};
+
+pub const CreateWebhookRequest = struct {
+    url: []const u8,
+    events: []const EventType,
+    metadata: ?std.json.Value = null,
+};
+
+pub const WebhookDto = struct {
+    id: []const u8,
+    object: []const u8,
+    status: WebhookStatus,
+    url: []const u8,
+    events: []const EventType,
+    secret: ?[]const u8,
+    metadata: ?std.json.Value,
+    created_at: []const u8,
+    updated_at: []const u8,
+};
+
+pub const WebhookAttemptDto = struct {
+    id: []const u8,
+    object: []const u8,
+    event_id: []const u8,
+    event_type: EventType,
+    webhook_id: []const u8,
+    url: []const u8,
+    successful: bool,
+    response_headers: std.json.Value,
+    response_body: []const u8,
+    response_status_code: u16,
+    attempt: u8,
+    attempted_at: []const u8,
+};
+
+
+ src/types/errors.zig
+
+Define all error tags as a Zig enum:
+zig
+pub const ErrorTag = enum {
+    INVALID_API_KEY,
+    NO_MORE_CREDITS,
+    API_KEY_BUDGET_EXCEEDED,
+    TEAM_BUDGET_EXCEEDED,
+    ACCESS_DENIED,
+    FEATURE_DISABLED,
+    ROBOTS_FILTER_FAILED,
+    PROHIBITED_CONTENT,
+    CONTENT_FILTER_ERROR,
+    INVALID_REQUEST_BODY,
+    INVALID_REQUEST,
+    INVALID_URLS,
+    INVALID_NUM_RESULTS,
+    INVALID_FLAGS,
+    INVALID_JSON_SCHEMA,
+    NUM_RESULTS_EXCEEDED,
+    NO_CONTENT_FOUND,
+    FETCH_DOCUMENT_ERROR,
+    UNABLE_TO_GENERATE_RESPONSE,
+    DEFAULT_ERROR,
+    INTERNAL_ERROR,
+};
+
+
+Define AppError which carries an ErrorTag, an HTTP status code, a human-readable message, and an optional request_id. Implement AppError.toJson(allocator) which serializes to {"requestId":"...","error":"...","tag":"..."}. Implement AppError.httpStatus() returning the correct HTTP status code for each tag as documented.
+
+---
+
+ 6. DATABASE POOL — src/db/pool.zig
+
+Implement a thread-safe connection pool wrapping libpq:
+- Pool struct containing a fixed-size array of *PGconn pointers, a Mutex, and a Semaphore.
+- Pool.init(allocator, dsn, size) opens size connections, runs PQstatus to verify each, returns error if any fail.
+- Pool.acquire() blocks on the semaphore then returns a *Connection.
+- Pool.release(conn) returns the connection and posts the semaphore.
+- Connection wraps *PGconn and exposes:
+  - exec(sql, params) executing a parameterized query via PQexecParams, returning *PGresult or error.
+  - execOne(sql, params) returning the first row as a Row struct.
+  - query(sql, params) returning a ResultSet with next() ?Row iteration.
+  - begin(), commit(), rollback() for explicit transactions.
+- Row exposes getString(col_index), getInt(col_index), getInt64(col_index), getBool(col_index), getFloat(col_index), getBytes(col_index), getJson(col_index, allocator), isNull(col_index).
+- All PGresult objects are freed automatically via defer PQclear(result).
+- Log every slow query (> 100ms) at warn level.
+
+ src/db/migrations.zig
+
+Implement Migrations.run(pool, sql_dir) which:
+- Creates a schema_migrations table if it does not exist: (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ).
+- Reads all .sql files from sql_dir in lexicographic order.
+- For each file not yet recorded in schema_migrations, executes it inside a transaction, then inserts a row.
+- Logs each migration applied.
+
+ src/db/queries.zig
+
+Implement every database query function used throughout the application. Each function receives a *Pool and any necessary parameters and returns typed Zig structs. Functions must include:
+
+**API key functions:**
+- findApiKeyByHash(pool, hash: [32]u8) !?ApiKeyRow
+- incrementApiKeySpend(pool, key_id: Uuid, cents: i64) !void
+- createApiKey(pool, team_id: Uuid, name: ?[]const u8, rate_limit_qps: ?u32, budget_cents: ?i64) !ApiKeyRow — generates the raw key, hashes it with SHA-256, stores the hash, returns both the row and the raw key.
+- revokeApiKey(pool, key_id: Uuid) !void
+- listApiKeys(pool, team_id: Uuid) ![]ApiKeyRow
+
+**Document functions:**
+- upsertDocument(pool, doc: DocumentRow) !void
+- getDocumentByUrl(pool, url: []const u8) !?DocumentRow
+- updateDocumentEmbedding(pool, url: []const u8, embedding: []const f32) !void
+- searchByFullText(pool, query: []const u8, limit: usize, filters: SearchFilters) ![]DocumentRow
+- getDocumentsByIds(pool, ids: []const []const u8) ![]DocumentRow
+
+**Billing functions:**
+- getTeamBalance(pool, team_id: Uuid) !i64
+- deductTeamBalance(pool, team_id: Uuid, cents: i64) !i64 — atomic, returns new balance, returns error if insufficient.
+- recordBillingEvent(pool, team_id: Uuid, api_key_id: ?Uuid, event_type: []const u8, amount_cents: i32, description: []const u8) !void
+
+**Monitor functions:**
+- createMonitor(pool, req: CreateMonitorRequest, team_id: Uuid, secret: []const u8) !MonitorRow
+- getMonitor(pool, id: Uuid, team_id: Uuid) !?MonitorRow
+- listMonitors(pool, team_id: Uuid, cursor: ?[]const u8, limit: usize) !PaginatedResult(MonitorRow)
+- updateMonitor(pool, id: Uuid, team_id: Uuid, patch: MonitorPatch) !MonitorRow
+- deleteMonitor(pool, id: Uuid, team_id: Uuid) !void
+- listDueMonitors(pool, now: i64) ![]MonitorRow — returns active monitors where next_run_at <= now.
+- createMonitorRun(pool, monitor_id: Uuid) !Uuid
+- updateMonitorRun(pool, run_id: Uuid, status: RunStatus, output: ?std.json.Value, fail_reason: ?[]const u8) !void
+- setMonitorNextRun(pool, monitor_id: Uuid, next_run_at: i64) !void
+
+**Webset functions:**
+- createWebset(pool, team_id: Uuid, req: CreateWebsetRequest) !WebsetRow
+- getWebset(pool, id_or_external: []const u8, team_id: Uuid) !?WebsetRow
+- listWebsets(pool, team_id: Uuid, cursor: ?[]const u8, limit: usize) !PaginatedResult(WebsetRow)
+- updateWebsetStatus(pool, id: Uuid, status: WebsetStatus) !void
+- deleteWebset(pool, id: Uuid, team_id: Uuid) !void
+- createWebsetSearch(pool, webset_id: Uuid, req: CreateWebsetSearchRequest) !WebsetSearchRow
+- updateWebsetSearch(pool, id: Uuid, status: WebsetSearchStatus, found: u32, completion: f32) !void
+- createWebsetItem(pool, webset_id: Uuid, source_id: Uuid, properties: std.json.Value, evaluations: std.json.Value) !WebsetItemRow
+- appendEnrichmentToItem(pool, item_id: Uuid, enrichment_result: std.json.Value) !void
+- listWebsetItems(pool, webset_id: Uuid, cursor: ?[]const u8, limit: usize) !PaginatedResult(WebsetItemRow)
+- createWebsetEnrichment(pool, webset_id: Uuid, req: CreateEnrichmentRequest) !WebsetEnrichmentRow
+- getWebsetEnrichment(pool, id: Uuid) !?WebsetEnrichmentRow
+- deleteWebsetEnrichment(pool, id: Uuid) !void
+
+**Event functions:**
+- emitEvent(pool, team_id: Uuid, event_type: []const u8, data: std.json.Value) ![]const u8 — inserts into platform_events, returns event id.
+- listEvents(pool, team_id: Uuid, cursor: ?[]const u8, limit: usize) !PaginatedResult(EventRow)
+
+All query functions must use parameterized queries via $1, $2, etc. in the SQL and pass values through PQexecParams with explicit type OIDs where needed.
+
+---
+
+ 7. CACHE LAYER — src/cache/redis.zig
+
+Implement a Redis client using libhiredis:
+- RedisClient struct wrapping a *redisContext.
+- RedisClient.connect(url) parses the Redis URL (scheme, host, port, password, db number) and calls redisConnect.
+- RedisClient.get(key, allocator) !?[]const u8
+- RedisClient.set(key, value, ttl_seconds: ?u64) !void
+- RedisClient.del(key) !void
+- RedisClient.incrby(key, amount: i64) !i64
+- RedisClient.expire(key, ttl_seconds: u64) !void
+- RedisClient.setNx(key, value, ttl_seconds: u64) !bool — atomic set-if-not-exists.
+- RedisClient.getSet(key, new_value, allocator) !?[]const u8
+- RedisClient.pipeline() returning a Pipeline that accumulates commands, flushed with Pipeline.exec().
+- All commands handle REDIS_REPLY_ERROR by returning a RedisError tagged union with the error string.
+- Implement a Pool of RedisClient instances (same acquire/release pattern as the DB pool).
+
+---
+
+ 8. HTTP CLIENT — src/utils/http_client.zig
+
+Implement a minimal HTTP/1.1 + HTTPS client using POSIX sockets and OpenSSL directly (do not use std.http.Client):
+- HttpClient struct with fields: host, port, use_tls, ssl_ctx: ?*SSL_CTX, timeout_ms.
+- HttpClient.init(url, timeout_ms) parses the URL into host, port, path, and creates an SSL context if scheme is https.
+- HttpClient.get(path, headers, allocator) !Response
+- HttpClient.post(path, body, content_type, headers, allocator) !Response
+- Response struct: status: u16, headers: std.StringHashMap([]const u8), body: []const u8.
+- Connection is created fresh per call (no keep-alive) to avoid thread safety complexity.
+- Read the response body in chunks up to crawler_max_body_bytes from config.
+- Decompress gzip/deflate if Content-Encoding header is set, using zlib.
+- Enforce the timeout via setsockopt(SO_RCVTIMEO, SO_SNDTIMEO).
+- Free all memory on error.
+
+---
+
+ 9. CRYPTOGRAPHIC UTILITIES — src/utils/crypto.zig
+
+Implement using OpenSSL via C linkage:
+- sha256(data: []const u8, out: *[32]u8) void — wraps EVP_Digest.
+- hmacSha256(key: []const u8, data: []const u8, out: *[32]u8) void — wraps HMAC.
+- hexEncode(bytes: []const u8, allocator) ![]const u8 — lowercase hex.
+- hexDecode(hex: []const u8, allocator) ![]u8
+- randomBytes(buf: []u8) void — calls RAND_bytes.
+- randomHex(len: usize, allocator) ![]const u8 — generates len random bytes and hex-encodes them.
+- generateApiKey(allocator) !struct { raw: []const u8, hash: [32]u8, prefix: [8]u8 } — generates 32 random bytes, hex-encodes as the raw key (64 hex chars), computes SHA-256 hash, extracts first 8 chars as prefix.
+- generateWebhookSecret(allocator) ![]const u8 — 32 random bytes hex-encoded = 64 char secret.
+- computeWebhookSignature(secret: []const u8, timestamp: i64, payload: []const u8, out: *[32]u8) void — HMAC-SHA256 of "{timestamp}.{payload}" with secret.
+- timingSafeEqual(a: []const u8, b: []const u8) bool — uses CRYPTO_memcmp.
+
+---
+
+ 10. UUID UTILITIES — src/utils/uuid.zig
+
+- Uuid is a [16]u8.
+- Uuid.generate() Uuid — version 4 UUID using randomBytes.
+- Uuid.toString(uuid: Uuid, allocator) ![]const u8 — formats as xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx.
+- Uuid.parse(str: []const u8) !Uuid — parses the hyphenated string form.
+- Uuid.fromPgBytes(bytes: []const u8) Uuid — converts PostgreSQL binary UUID to [16]u8.
+
+---
+
+ 11. JSON UTILITIES — src/utils/json.zig
+
+- parseRequest(comptime T: type, body: []const u8, allocator) !T — wraps std.json.parseFromSlice, returns typed struct.
+- writeResponse(writer, value: anytype) !void — wraps std.json.stringify with camelCase field name transformation.
+- camelToSnake(allocator, name: []const u8) ![]const u8
+- snakeToCamel(allocator, name: []const u8) ![]const u8
+- mergeJson(allocator, base: std.json.Value, patch: std.json.Value) !std.json.Value — deep merge, patch wins on conflict.
+
+The JSON serializer must output camelCase keys for all struct fields named with snake_case (i.e., published_date → "publishedDate"). Implement a custom serializer that performs this conversion for every response struct.
+
+---
+
+ 12. EMBEDDINGS — src/search/embeddings.zig
+
+Implement an embedding client that calls an OpenAI-compatible /v1/embeddings HTTP endpoint:
+- EmbeddingClient struct with http_client: HttpClient, model: []const u8, dim: usize.
+- EmbeddingClient.embed(text: []const u8, allocator) ![]f32 — POSTs {"model":"...","input":"..."} to the endpoint, parses the response, returns the embedding vector.
+- EmbeddingClient.embedBatch(texts: []const []const u8, allocator) ![][]f32 — batches up to 2048 texts per request, assembles the full list.
+- Normalize all returned vectors to unit length (L2 normalization).
+- Cache embeddings in Redis with key emb:{sha256_of_text} and TTL 7 days.
+
+---
+
+ 13. HNSW VECTOR INDEX — src/index/hnsw.zig
+
+Implement a persistent HNSW (Hierarchical Navigable Small World) index for approximate nearest-neighbor search over document embeddings:
+- HnswIndex struct with configurable M (default 16), ef_construction (default 200), ef_search (default 50), and dim.
+- Storage: serialize to a binary file on disk in a custom format:
+  - 4-byte magic 0x484E5357 ("HNSW")
+  - 4-byte version 1
+  - 4-byte dim
+  - 4-byte M
+  - 4-byte num_nodes
+  - For each node: id_len u32, id []u8, level u32, for each level: num_neighbors u32, neighbor_ids []u32
+  - Embedding vectors stored in a parallel flat file index.vecs as [num_nodes][dim]f32
+- HnswIndex.load(path, allocator) !HnswIndex — memory-maps the vector file, loads graph structure.
+- HnswIndex.save(path) !void
+- HnswIndex.insert(id: []const u8, vec: []const f32) !void
+- HnswIndex.search(query_vec: []const f32, k: usize, allocator) ![]SearchHit — returns up to k results with cosine similarity scores.
+- SearchHit = struct { id: []const u8, score: f32 }.
+- Thread-safety: use a RwLock (std.Thread.RwLock) — concurrent reads, exclusive writes.
+- The cosine similarity computation must use SIMD where available (use @Vector with compile-time vector width selection).
+
+---
+
+ 14. DOCUMENT PARSER — src/contents/parser.zig
+
+Implement HTML-to-Markdown conversion without any external library (pure Zig):
+- Parser.parseHtml(html: []const u8, allocator) !ParsedDocument
+- ParsedDocument = struct { title: ?[]const u8, author: ?[]const u8, published_at: ?[]const u8, main_text: []const u8, links: []const []const u8, image_links: []const []const u8 }
+- The HTML parser must handle:
+  - Strip <script>, <style>, <nav>, <footer>, <header>, <aside>, <form>, <iframe> elements and all their content.
+  - Extract <title> as document title.
+  - Extract <meta name="author">, <meta property="article:author"> as author.
+  - Extract <meta property="article:published_time">, <time datetime="..."> as published_at.
+  - Convert <h1>…<h6> to markdown  through .
+  - Convert <p> to paragraphs separated by double newline.
+  - Convert <a href="...">text</a> to [text](url) in markdown and add href to links list.
+  - Convert <img src="..."> to add src to image_links list.
+  - Convert <ul>/<ol>/<li> to markdown lists.
+  - Convert <code> to backtick-wrapped inline code.
+  - Convert <pre><code> to fenced code blocks.
+  - Convert <blockquote> to > -prefixed lines.
+  - Convert <strong>, <b> to **text**.
+  - Convert <em>, <i> to *text*.
+  - Decode HTML entities: &amp;, &lt;, &gt;, &quot;, &apos;, &NNN;, &xHHH;.
+  - Strip all remaining tags.
+  - Collapse multiple blank lines to at most two.
+  - Trim leading/trailing whitespace.
+
+---
+
+ 15. WEB CRAWLER — src/contents/crawler.zig
+
+Implement:
+- Crawler struct with a reference to config.
+- Crawler.fetch(url: []const u8, allocator) !CrawlResult — fetches the URL via HttpClient, checks robots.txt compliance (cached in Redis for 1 hour), parses the HTML via parser.zig, returns a CrawlResult.
+- CrawlResult = struct { url: []const u8, content_hash: [32]u8, parsed: ParsedDocument, status_code: u16 }.
+- Crawler.fetchSubpages(url: []const u8, targets: ?[]const []const u8, limit: usize, allocator) ![]CrawlResult — fetches the page, extracts all <a href> links pointing to the same domain, scores them by presence of target keywords in the href, fetches up to limit in parallel using a thread pool, returns results.
+- Robots.txt check: GET /robots.txt for each domain, parse User-agent: * and Disallow: directives. Cache parsed rules in Redis with key robots:{domain}.
+- Rate-limit crawling to at most 5 concurrent fetches per domain using a domain-keyed semaphore map.
+
+---
+
+ 16. CONTENT FRESHNESS — src/contents/freshness.zig
+
+Implement the max_age_hours logic:
+- shouldLivecrawl(db_pool, url: []const u8, max_age_hours: ?i64, allocator) !bool — queries documents.crawled_at from the DB, computes age in hours, returns true if the document is absent or older than max_age_hours.
+- Special values: 0 → always livecrawl, -1 → never livecrawl (return false always), null → livecrawl only if absent.
+- Freshness.resolveContent(db_pool, cache, crawler, url, options: ContentsOptions, allocator) !ContentResolveResult — combines DB lookup, cache check, and live crawl decision into one function used by both /search and /contents handlers.
+
+---
+
+ 17. HIGHLIGHTS — src/contents/highlights.zig
+
+Implement extractive highlight generation:
+- Highlights.extract(text: []const u8, query: ?[]const u8, max_chars: usize, allocator) ![]const []const u8
+- Algorithm:
+  1. Tokenize text into sentences (split on . , ! , ? , \n with upper-case follow).
+  2. If query is provided, compute TF-IDF overlap score between each sentence and the query tokens. If no query, score each sentence by its position (earlier = higher score) weighted by sentence length (very short sentences penalized).
+  3. Sort sentences by score descending.
+  4. Greedily select sentences until max_chars would be exceeded.
+  5. Re-order selected sentences by their original document position.
+  6. Return as a slice of strings, each being the selected sentence text.
+- Highlights.score(text: []const u8, query: []const u8) !f32 — returns a cosine-similarity-like score using token overlap (for use in search ranking).
+
+---
+
+ 18. SUMMARY GENERATION — src/contents/summary.zig
+
+Implement LLM-powered summary generation:
+- Summary.generate(llm_client, text: []const u8, query: ?[]const u8, schema: ?std.json.Value, allocator) ![]const u8
+- Truncate text to at most 100,000 characters before sending to the LLM.
+- If schema is provided and is a valid JSON Schema object, prompt the LLM to return structured JSON matching the schema. Parse the response as JSON and re-serialize it for the summary field.
+- If no schema, prompt the LLM for a concise 3-paragraph summary in plain text.
+- Cache summaries in Redis: key summary:{content_hash}:{query_hash} with TTL 24 hours. If schema is provided, include its SHA-256 in the key.
+
+---
+
+ 19. SEARCH ENGINE — src/search/engine.zig
+
+Implement the unified search entry point SearchEngine.search(req: SearchRequest, auth: AuthContext, allocator) !SearchResponse:
+
+This function orchestrates all search types:
+
+1. **Validate** num_results ≤ max_search_results.
+2. **Check credit balance** via billing.zig before executing; return NO_MORE_CREDITS if insufficient.
+3. **Dispatch** to the appropriate sub-engine based on req.type:
+   - auto → auto.zig
+   - fast → fast.zig
+   - instant → instant.zig
+   - deep-lite → deep_lite.zig
+   - deep → deep.zig
+   - deep-reasoning → deep_reasoning.zig
+4. **Apply category filter** via category_filter.zig after retrieval.
+5. **Apply domain filters** (include_domains, exclude_domains) post-retrieval.
+6. **Apply date filters** (start_published_date, end_published_date, start_crawl_date, end_crawl_date) post-retrieval.
+7. **Apply text filters** (include_text, exclude_text) — check that required phrases appear and excluded phrases do not appear in body_text.
+8. **Apply user location bias** if user_location is set.
+9. **Apply moderation** filter if req.moderation is true (simple keyword blocklist).
+10. **Retrieve contents** if req.contents is non-null, calling freshness.resolveContent per result URL, then extracting text/highlights/summary as requested.
+11. **Apply output_schema/system_prompt** synthesis via the LLM for deep search types; for non-deep types, if output_schema is provided, synthesize a response using the search results as context.
+12. **Compute cost** based on search type and contents requested.
+13. **Deduct credits** from the team balance.
+14. **Record the search request** in search_requests.
+15. **Record billing event**.
+16. **Return** SearchResponse with request_id, results, cost_dollars, and search_time.
+
+ src/search/neural.zig
+
+Implement NeuralSearch.search(db_pool, hnsw_index, embedding_client, req, allocator) ![]ScoredDoc:
+1. Call embedding_client.embed(req.query) to get a query vector.
+2. Search the hnsw_index for the top req.num_results * 4 nearest neighbors (over-fetch for filtering).
+3. For any hits not in the DB, fetch from DB by ID.
+4. Return scored documents.
+
+ src/search/keyword.zig
+
+Implement KeywordSearch.search(db_pool, req, allocator) ![]ScoredDoc:
+1. Build a PostgreSQL to_tsquery expression from the query using plainto_tsquery.
+2. Execute: SELECT id, url, title, ts_rank(to_tsvector('english', body_text), plainto_tsquery('english', $1)) AS score FROM documents WHERE to_tsvector('english', body_text) @@ plainto_tsquery('english', $1) ORDER BY score DESC LIMIT $2.
+3. Apply filters.
+4. Return scored documents.
+
+ src/search/auto.zig
+
+Implement AutoSearch.search:
+1. Run NeuralSearch and KeywordSearch in parallel using two goroutines (Zig threads).
+2. Merge results: for documents appearing in both, take the higher score. Deduplicate by URL.
+3. Re-rank merged list using Reranker.rerank(query, docs).
+4. Return top num_results.
+
+ src/search/fast.zig
+
+Same as AutoSearch but skip the cross-encoder reranker and use a simpler weighted-average fusion of neural and keyword scores.
+
+ src/search/instant.zig
+
+Pure neural search without reranking, with aggressive caching of embedding computation and result list in Redis (key: instant:{sha256(query)}:{num_results}:{filters_hash}, TTL: 60 seconds).
+
+ src/search/deep_lite.zig
+
+Implement DeepLiteSearch.search:
+1. Run AutoSearch with ef_search = 100 (higher recall).
+2. Generate a short synthesized answer from top 5 results using the LLM.
+3. Return results plus output.
+
+ src/search/deep.zig
+
+Implement DeepSearch.search:
+1. If additional_queries is non-empty, run a parallel search for each, merge results.
+2. If additional_queries is empty and the query is non-trivial, call LLM to generate 3 query variations, then search each.
+3. Merge all results, deduplicate by URL, rerank by the original query.
+4. Synthesize output.content from top 10 results using LLM with system_prompt and output_schema.
+5. Generate output.grounding by identifying which result URLs the LLM cited for each output field.
+
+ src/search/deep_reasoning.zig
+
+Same as deep.zig but use a more capable LLM model (set via config) and increase the synthesis prompt to instruct chain-of-thought reasoning before producing the final output.
+
+ src/search/reranker.zig
+
+Implement Reranker.rerank(query: []const u8, docs: []ScoredDoc, allocator) ![]ScoredDoc:
+- HTTP POST to config.reranker_url with {"query": "...", "passages": [...]}.
+- The reranker endpoint is expected to return an array of {"index": N, "score": f32}.
+- Re-sort docs by reranker scores.
+- Fall back to original scores if the reranker call fails (log warning).
+
+ src/search/category_filter.zig
+
+Implement domain allow-lists for each category that constrain which domains are eligible:
+- company: LinkedIn company URLs, Crunchbase, company homepages (no specific blocklist — detect via heuristics on the URL and page content).
+- people: LinkedIn profile URLs (pattern /in/ in path), personal site domains.
+- research paper: arXiv.org, papers.ssrn.com, openreview.net, pubmed URLs, doi.org, semanticscholar.org.
+- news: URLs from a curated 500-domain news domain list stored as a compile-time string table.
+- financial report: sec.gov, ir.* subdomains, *investor*.
+- personal site: exclude major platforms (LinkedIn, Twitter, Facebook, YouTube, Wikipedia, Reddit); prioritize .io, .me, .xyz, substack.com, medium.com/@ paths.
+- people and company categories disallow startPublishedDate, endPublishedDate, excludeDomains — return INVALID_REQUEST_BODY if provided.
+
+ src/search/query_expansion.zig
+
+Implement QueryExpander.expand(llm_client, query: []const u8, n: usize, allocator) ![]const []const u8:
+- Prompt the LLM with: given the query, produce n semantically diverse rephrasings that would retrieve different but relevant documents.
+- Parse the LLM response as a JSON array of strings.
+- Return the array.
+
+---
+
+ 20. ANSWER API — src/handlers/answer.zig
+
+Implement handleAnswer(req: HttpRequest, auth: AuthContext, allocator) !HttpResponse:
+1. Parse AnswerRequest from the request body.
+2. Run AutoSearch with num_results = 10 and retrieve text contents for all results.
+3. Build a prompt: system instructions telling the LLM to answer the query using only the provided sources, citing them inline. Include the req.system_prompt if provided.
+4. If req.output_schema is provided, instruct the LLM to produce JSON matching the schema.
+5. Call the LLM (streaming if req.stream = true).
+6. Parse the LLM response to extract citations (URLs referenced in the answer).
+7. If streaming: write SSE chunks in OpenAI chat completion chunk format to the response writer directly.
+8. If not streaming: collect the full response, build AnswerResponse, serialize, return.
+9. Deduct credits.
+
+---
+
+ 21. RESEARCH API — src/handlers/research.zig
+
+The Research API runs asynchronous, multi-step research tasks.
+
+Implement:
+- POST /research/v1 → createResearchTask(req, auth, allocator) !HttpResponse:
+  - Parse ResearchCreateRequest.
+  - Insert a row into a research_tasks table (add this table to sql/001_initial.sql): id UUID PK, team_id UUID, model TEXT, instructions TEXT, output_schema JSONB, status TEXT DEFAULT 'pending', output JSONB, error_message TEXT, created_at TIMESTAMPTZ, started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ, cost_dollars JSONB.
+  - Enqueue the task ID to a Redis list research:queue.
+  - Return {"researchId": "...", "status": "pending"} with HTTP 201.
+- GET /research/v1/{id} → getResearchTask(id, auth, query_params, allocator) !HttpResponse:
+  - Fetch the task from DB.
+  - If ?stream=true and status is still running, write SSE events by polling Redis pub/sub channel research:events:{id} for up to 30 seconds.
+  - Otherwise, return the serialized ResearchDto.
+- GET /research/v1 → listResearchTasks(auth, query_params, allocator) !HttpResponse:
+  - Paginated list of tasks for the team.
+
+Implement a research worker that runs in a background thread:
+- ResearchWorker.run(config, db_pool, redis_pool, llm_client, allocator) void — loops forever, blocking on BLPOP research:queue 5.
+- For each task ID dequeued:
+  1. Update status to running.
+  2. Call deepSearch with the instructions as the query.
+  3. For each plan step (decomposed sub-query), publish a plan-operation event to research:events:{id}.
+  4. Synthesize the final output using the LLM with the output_schema.
+  5. Update the task to completed with the output.
+  6. Publish a research-output event.
+  7. On error, update to failed with the error message.
+
+---
+
+ 22. LIVECRAWL — src/contents/livecrawl.zig
+
+Implement Livecrawl.fetch(url: []const u8, timeout_ms: u64, allocator) !CrawlResult:
+- Respects robots.txt.
+- Uses HttpClient with the specified timeout.
+- Returns ContentStatus with the appropriate error tag on failure:
+  - HTTP 404 → CRAWL_NOT_FOUND
+  - Timeout → CRAWL_LIVECRAWL_TIMEOUT
+  - HTTP 403 → SOURCE_NOT_AVAILABLE
+  - Any other error → CRAWL_UNKNOWN_ERROR
+- On success, parses the HTML, computes content hash, upserts the document into the DB and HNSW index.
+
+---
+
+ 23. MONITORS — src/monitors/scheduler.zig and src/monitors/runner.zig
+
+ scheduler.zig
+
+Implement a cron scheduler that runs in a background thread:
+- Every 30 seconds, call db_queries.listDueMonitors(pool, now).
+- For each due monitor, enqueue monitor_id to Redis list monitors:queue.
+- Compute the next next_run_at from the period string ("1h", "6h", "1d", "7d") and update the DB.
+- If a monitor run is already in progress (check a Redis key monitor:running:{id}), skip.
+
+Parse period strings: split on unit character (h, d), parse integer prefix, convert to seconds.
+
+ runner.zig
+
+Implement a monitor runner in a background thread:
+- Loop on BLPOP monitors:queue 5.
+- For each monitor ID:
+  1. Set Redis key monitor:running:{id} with TTL = (period_seconds + 3600).
+  2. Create a monitor_run record (status running).
+  3. Emit monitor.run.created event.
+  4. Execute the monitor's search config via the search engine with deduplication (described below).
+  5. If output_schema is set, synthesize structured output via LLM.
+  6. Update run to completed with output.
+  7. Emit monitor.run.completed event.
+  8. Deliver webhook.
+  9. Delete Redis running key.
+  10. On any error, mark run as failed.
+
+ src/monitors/dedup.zig
+
+Implement deduplication for monitor runs:
+- Dedup.getSeenIds(redis_pool, monitor_id: Uuid, allocator) ![]const []const u8 — fetches a Redis set monitor:seen:{id} containing document IDs from previous runs.
+- Dedup.recordSeen(redis_pool, monitor_id: Uuid, ids: []const []const u8) !void — adds new IDs to the set, keeps only the most recent 5 runs worth (use a sliding-window approach via Redis sorted set with timestamp as score).
+- Filter search results to exclude any ID already in the seen set.
+- Additionally, apply date filtering: only include documents published or crawled after (now - 2 * period_seconds).
+
+---
+
+ 24. WEBSETS — full implementation in src/websets/
+
+ src/websets/webset.zig
+
+Implement the lifecycle coordinator:
+- Webset.create(db_pool, req: CreateWebsetRequest, team_id: Uuid, allocator) !WebsetDto:
+  - Insert webset into DB.
+  - If req.search is provided, call Webset.addSearch.
+  - If req.enrichments is provided, for each call Webset.addEnrichment.
+  - Emit webset.created event.
+  - Return the DTO.
+- Webset.addSearch(db_pool, redis_pool, webset_id, req, allocator) !WebsetSearchDto:
+  - Insert search into DB.
+  - Enqueue webset_search:{id} to Redis list websets:search:queue.
+  - Emit webset.search.created event.
+  - Return the DTO.
+- Webset.addEnrichment(db_pool, redis_pool, webset_id, req, allocator) !WebsetEnrichmentDto:
+  - Insert enrichment into DB.
+  - For each existing item in the webset, enqueue enrichment work.
+  - Emit enrichment created event.
+- Webset.updateStatus(db_pool, webset_id, allocator) !void:
+  - Check if all searches and enrichments are completed or canceled.
+  - If so, update webset status to idle, emit webset.idle event.
+- Webset.cancel(db_pool, redis_pool, webset_id, team_id, allocator) !WebsetDto:
+  - Cancel all running searches (update status, delete from queue).
+  - Cancel all pending enrichments.
+  - Update webset to idle.
+
+ src/websets/search_agent.zig
+
+Implement the search agent worker (runs in a background thread, consumes from websets:search:queue):
+- For each search ID:
+  1. Run AutoSearch with category matching entity type.
+  2. For each search result, run Verification.verify(result, criteria, allocator).
+  3. If all criteria pass (all satisfied == "yes"), call Webset.addItem.
+  4. Update search progress (found, completion) every 10 items.
+  5. Emit webset.search.updated events.
+  6. When done (reached count items or exhausted search results), mark search completed, emit webset.search.completed.
+  7. Call Webset.updateStatus.
+  8. Enqueue enrichment work for each new item.
+
+ src/websets/verification.zig
+
+Implement criterion evaluation using the LLM:
+- Verification.verify(result: SearchResult, criteria: []const Criterion, llm_client, allocator) ![]const EvaluationResult
+- Build a prompt presenting the document URL, title, and body text alongside each criterion's description.
+- Ask the LLM to evaluate each criterion as yes, no, or unclear with a brief reasoning and up to 3 supporting URLs/snippets.
+- Parse the structured JSON response.
+- Cache evaluation results in Redis with key verify:{content_hash}:{criteria_hash} and TTL 1 hour.
+
+ src/websets/enrichment_agent.zig
+
+Implement the enrichment agent worker (consumes from websets:enrichment:queue):
+- For each {item_id, enrichment_id} pair:
+  1. Load the item's URL and properties.
+  2. Load the enrichment's description and format.
+  3. Run a web search specifically about the item (using the item URL as context).
+  4. Prompt the LLM to extract the requested data in the specified format from the search results.
+  5. Parse the LLM response according to format:
+     - text → string array.
+     - number → parse as f64, store as string.
+     - date → ISO 8601 string.
+     - url → validate URL format.
+     - email → validate email format.
+     - phone → normalize E.164.
+     - options → must match one of the allowed labels.
+  6. Update the item's enrichments JSONB array in the DB.
+  7. Emit webset.item.enriched event.
+  8. Call Webset.updateStatus.
+
+ src/websets/items.zig
+
+Implement Webset.addItem(db_pool, redis_pool, webset_id, source_id, properties, evaluations, allocator) !WebsetItemDto:
+- Insert into webset_items.
+- Emit webset.item.created event.
+- Deliver webhooks subscribed to webset.item.created.
+
+Implement entity property extraction:
+- extractCompanyProperties(result: SearchResult, allocator) !CompanyProperties — uses the page content to extract name, location, employees, industry, about, logo URL.
+- extractPersonProperties(result: SearchResult, allocator) !PersonProperties — LinkedIn profile URL: extract name, location, position, picture URL.
+- extractArticleProperties(result: SearchResult, allocator) !ArticleProperties
+- extractResearchPaperProperties(result: SearchResult, allocator) !ResearchPaperProperties
+
+ src/websets/exports.zig
+
+Implement CSV export:
+- Export.generate(db_pool, webset_id: Uuid, allocator) ![]const u8:
+  - Fetch all items.
+  - Build a CSV with columns: id, url, type, description, all entity-specific fields, all enrichment results (one column per enrichment, identified by enrichment title).
+  - Handle commas and quotes per RFC 4180.
+- Store the CSV in a temporary location (write to /tmp/{export_id}.csv).
+- Return a download URL (in production this would be a pre-signed object storage URL; implement a local endpoint GET /downloads/{export_id} that streams the file).
+
+ src/websets/imports.zig
+
+Implement URL import:
+- On POST /v0/imports with a websetId and urls array:
+  - Create an import record in the DB.
+  - For each URL, look up or crawl the document, then create a webset item directly without going through the search agent.
+  - Enqueue enrichment for each item.
+  - Emit import.created and import.completed events.
+
+---
+
+ 25. WEBHOOKS — src/webhooks/
+
+ src/webhooks/dispatcher.zig
+
+Implement Dispatcher.deliver(db_pool, redis_pool, webhook: WebhookRow, event_type: EventType, data: std.json.Value, allocator) !void:
+- Serialize the event payload: {"id": "{uuid}", "object": "event", "type": "{event_type}", "data": {data}, "createdAt": "{iso8601}"}.
+- Sign the payload with signer.sign(webhook.secret, payload).
+- HTTP POST to webhook.url with:
+  - Content-Type: application/json
+  - Exa-Signature: t={unix_timestamp},v1={hmac_hex}
+- On non-2xx response or network error, enqueue a retry.
+- Log each delivery attempt to webhook_attempts table.
+- After max_retries failed attempts, mark the webhook as inactive.
+
+ src/webhooks/signer.zig
+
+Implement Signer.sign(secret: []const u8, timestamp: i64, payload: []const u8, allocator) ![]const u8:
+- Returns the Exa-Signature header value: "t={timestamp},v1={hmac_hex}".
+- Uses crypto.computeWebhookSignature.
+
+ src/webhooks/retry.zig
+
+Implement exponential backoff retry using Redis sorted sets:
+- On failure, add to webhooks:retry sorted set with score = now + (2^attempt_number * 30) (seconds).
+- A background thread polls every 10 seconds for items with score ≤ now, fetches them, retries delivery.
+- Attempts are capped at config.webhook_max_retries.
+
+---
+
+ 26. BILLING — src/billing/
+
+ src/billing/pricing.zig
+
+Implement exact pricing from configuration:
+
+zig
+pub const Pricing = struct {
+    config: *const Config,
+
+    pub fn searchCost(self: Pricing, search_type: SearchType, num_results: usize) i64 {
+        const base = switch (search_type) {
+            .auto, .fast, .instant, .neural, .keyword => self.config.credit_search_auto_cents,
+            .@"deep-lite" => self.config.credit_search_deep_lite_cents,
+            .deep => self.config.credit_search_deep_cents,
+            .@"deep-reasoning" => self.config.credit_search_deep_reasoning_cents,
+        };
+        const extra_results = if (num_results > 10) @as(i64, num_results - 10) else 0;
+        return @as(i64, base) + extra_results * @as(i64, self.config.credit_contents_per_page_cents / 10);
+    }
+
+    pub fn contentsCost(self: Pricing, num_pages: usize, has_text: bool, has_highlights: bool, has_summary: bool) i64 {
+        var per_page: i64 = 0;
+        if (has_text) per_page += @as(i64, self.config.credit_contents_per_page_cents);
+        if (has_highlights) per_page += @as(i64, self.config.credit_contents_per_page_cents);
+        if (has_summary) per_page += @as(i64, self.config.credit_summary_per_page_cents);
+        return per_page * @as(i64, num_pages);
+    }
+
+    pub fn answerCost(self: Pricing) i64 {
+        return @as(i64, self.config.credit_answer_cents);
+    }
+};
+
+
+ src/billing/credits.zig
+
+Implement Credits.charge(db_pool, team_id: Uuid, api_key_id: ?Uuid, amount_cents: i64, description: []const u8) !void:
+- Atomically deducts from teams.credit_balance_cents using UPDATE teams SET credit_balance_cents = credit_balance_cents - $1 WHERE id = $2 AND credit_balance_cents >= $1 RETURNING credit_balance_cents.
+- If the UPDATE returns 0 rows, return error.InsufficientCredits.
+- If the API key has a budget, also check and deduct from api_keys.spent_cents.
+- Record in billing_events.
+- Record in api_key_usage_daily.
+
+ src/billing/metering.zig
+
+Implement usage tracking:
+- Metering.recordApiKeyUsage(redis_pool, api_key_id: Uuid, request_type: []const u8) !void — increment Redis counter usage:{api_key_id}:{date}:{type} with daily expiry.
+- Metering.getApiKeyUsage(redis_pool, api_key_id: Uuid, start_date: []const u8, end_date: []const u8, allocator) !UsageSummary — aggregate usage from the Redis daily counters.
+
+---
+
+ 27. RATE LIMITER — src/middleware/rate_limiter.zig
+
+Implement a sliding-window rate limiter using Redis:
+- RateLimiter.check(redis_pool, api_key_id: Uuid, qps_limit: u32, burst: u32, allocator) !RateLimitResult
+- Uses the token bucket algorithm:
+  - Key: ratelimit:{api_key_id}.
+  - Redis hash with fields tokens (current token count × 1000 to avoid floats) and last_refill_ms.
+  - EVAL Lua script to atomically: compute time elapsed since last refill, add elapsed_ms * (qps_limit / 1000) tokens, cap at burst * 1000, subtract 1000 (one request), store updated values, return whether request is allowed.
+- RateLimitResult = struct { allowed: bool, remaining: u32, reset_after_ms: u64 }.
+- On allowed = false, the HTTP handler returns 429 with headers X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset.
+
+---
+
+ 28. AUTHENTICATION — src/middleware/auth.zig
+
+Implement Auth.authenticate(req: HttpRequest, db_pool, redis_pool, allocator) !AuthContext:
+- Extract x-api-key header.
+- Hash the key with SHA-256.
+- Check Redis cache auth:{key_prefix} (TTL 60s); if hit, return cached AuthContext.
+- On cache miss, query api_keys joined to teams by the key hash.
+- If no row, return error.InvalidApiKey.
+- If row has revoked_at, return error.InvalidApiKey.
+- Cache the result in Redis.
+- Return AuthContext = struct { api_key_id: Uuid, team_id: Uuid, team_balance_cents: i64, rate_limit_qps: u32, key_budget_cents: ?i64, key_spent_cents: i64 }.
+
+---
+
+ 29. HTTP SERVER — src/server.zig
+
+Implement the HTTP/1.1 server:
+- Uses POSIX sockets directly: socket(), setsockopt(SO_REUSEADDR), bind(), listen(), accept().
+- Main accept loop: on each new connection, dispatch to a thread pool.
+- ThreadPool = a fixed-size array of OS threads, a channel (mutex + condition variable + ring buffer) for connection file descriptors.
+- Each worker thread loops: take an fd from the channel, call handleConnection(fd, allocator).
+- handleConnection reads the HTTP request line and headers using a state machine parser. Reads the body up to Content-Length bytes. Calls router.route(request). Writes the response. Closes the fd.
+- HTTP request parsing:
+  - Parse METHOD PATH HTTP/1.1\r\n.
+  - Parse headers until \r\n\r\n.
+  - If Content-Length is present, read exactly that many bytes as the body.
+  - If Transfer-Encoding: chunked, implement chunk reading.
+- HTTP response writing:
+  - Status line: HTTP/1.1 {code} {reason}\r\n.
+  - Headers including Content-Type, Content-Length, X-Request-Id, X-RateLimit-*.
+  - Body bytes.
+- For SSE streaming responses: write Content-Type: text/event-stream, Cache-Control: no-cache, Transfer-Encoding: chunked. Send each chunk as data: {json}\n\n. Send data: [DONE]\n\n when finished.
+- Keep request_id = uuid.generate() for each request; include in X-Request-Id header and in all error responses.
+
+---
+
+ 30. ROUTER — src/router.zig
+
+Implement router.route(req: HttpRequest, state: *AppState, allocator) !HttpResponse:
+
+Map every route exactly:
+
+
+POST   /search                                → handlers/search.zig:handleSearch
+POST   /contents                              → handlers/contents.zig:handleContents
+POST   /answer                                → handlers/answer.zig:handleAnswer
+POST   /context                               → handlers/search.zig:handleContext
+POST   /research/v1                           → handlers/research.zig:createTask
+GET    /research/v1                           → handlers/research.zig:listTasks
+GET    /research/v1/{id}                      → handlers/research.zig:getTask
+POST   /chat/completions                      → handlers/answer.zig:handleChatCompletions
+POST   /responses                             → handlers/answer.zig:handleResponses
+POST   /monitors                              → handlers/monitors.zig:createMonitor
+GET    /monitors                              → handlers/monitors.zig:listMonitors
+GET    /monitors/{id}                         → handlers/monitors.zig:getMonitor
+PATCH  /monitors/{id}                         → handlers/monitors.zig:updateMonitor
+DELETE /monitors/{id}                         → handlers/monitors.zig:deleteMonitor
+POST   /monitors/{id}/trigger                 → handlers/monitors.zig:triggerMonitor
+GET    /monitors/{id}/runs                    → handlers/monitors.zig:listRuns
+GET    /monitors/{id}/runs/{runId}            → handlers/monitors.zig:getRun
+POST   /monitors/batch                        → handlers/monitors.zig:batchMonitors
+POST   /websets/v0/websets                    → handlers/websets.zig:createWebset
+POST   /websets/v0/websets/preview            → handlers/websets.zig:previewWebset
+GET    /websets/v0/websets                    → handlers/websets.zig:listWebsets
+GET    /websets/v0/websets/{id}               → handlers/websets.zig:getWebset
+POST   /websets/v0/websets/{id}               → handlers/websets.zig:updateWebset
+DELETE /websets/v0/websets/{id}               → handlers/websets.zig:deleteWebset
+POST   /websets/v0/websets/{id}/cancel        → handlers/websets.zig:cancelWebset
+POST   /websets/v0/websets/{id}/searches      → handlers/websets.zig:createSearch
+GET    /websets/v0/websets/{id}/searches/{sid}→ handlers/websets.zig:getSearch
+POST   /websets/v0/websets/{id}/searches/{sid}/cancel → handlers/websets.zig:cancelSearch
+POST   /websets/v0/websets/{id}/enrichments   → handlers/websets.zig:createEnrichment
+GET    /websets/v0/websets/{id}/enrichments/{eid} → handlers/websets.zig:getEnrichment
+PATCH  /websets/v0/websets/{id}/enrichments/{eid} → handlers/websets.zig:updateEnrichment
+DELETE /websets/v0/websets/{id}/enrichments/{eid} → handlers/websets.zig:deleteEnrichment
+POST   /websets/v0/websets/{id}/enrichments/{eid}/cancel → handlers/websets.zig:cancelEnrichment
+GET    /websets/v0/websets/{id}/items         → handlers/websets.zig:listItems
+GET    /websets/v0/websets/{id}/items/{iid}   → handlers/websets.zig:getItem
+DELETE /websets/v0/websets/{id}/items/{iid}   → handlers/websets.zig:deleteItem
+POST   /websets/v0/websets/{id}/exports       → handlers/websets.zig:createExport
+GET    /websets/v0/websets/{id}/exports/{eid} → handlers/websets.zig:getExport
+POST   /websets/v0/imports                    → handlers/websets.zig:createImport
+GET    /websets/v0/imports/{id}               → handlers/websets.zig:getImport
+GET    /websets/v0/imports                    → handlers/websets.zig:listImports
+PATCH  /websets/v0/imports/{id}               → handlers/websets.zig:updateImport
+DELETE /websets/v0/imports/{id}               → handlers/websets.zig:deleteImport
+POST   /websets/v0/monitors                   → handlers/websets.zig:createWebsetMonitor
+GET    /websets/v0/monitors                   → handlers/websets.zig:listWebsetMonitors
+GET    /websets/v0/monitors/{id}              → handlers/websets.zig:getWebsetMonitor
+PATCH  /websets/v0/monitors/{id}              → handlers/websets.zig:updateWebsetMonitor
+DELETE /websets/v0/monitors/{id}              → handlers/websets.zig:deleteWebsetMonitor
+GET    /websets/v0/monitors/{id}/runs         → handlers/websets.zig:listWebsetMonitorRuns
+GET    /websets/v0/monitors/{id}/runs/{rid}   → handlers/websets.zig:getWebsetMonitorRun
+POST   /websets/v0/webhooks                   → handlers/websets.zig:createWebhook
+GET    /websets/v0/webhooks                   → handlers/websets.zig:listWebhooks
+GET    /websets/v0/webhooks/{id}              → handlers/websets.zig:getWebhook
+PATCH  /websets/v0/webhooks/{id}              → handlers/websets.zig:updateWebhook
+DELETE /websets/v0/webhooks/{id}              → handlers/websets.zig:deleteWebhook
+GET    /websets/v0/webhooks/{id}/attempts     → handlers/websets.zig:listWebhookAttempts
+GET    /websets/v0/events                     → handlers/websets.zig:listEvents
+GET    /websets/v0/events/{id}                → handlers/websets.zig:getEvent
+GET    /websets/v0/teams/me                   → handlers/websets.zig:getTeamInfo
+GET    /api-keys                              → handlers/team_management.zig:listApiKeys
+POST   /api-keys                              → handlers/team_management.zig:createApiKey
+GET    /api-keys/{id}                         → handlers/team_management.zig:getApiKey
+PUT    /api-keys/{id}                         → handlers/team_management.zig:updateApiKey
+DELETE /api-keys/{id}                         → handlers/team_management.zig:deleteApiKey
+GET    /api-keys/{id}/usage                   → handlers/team_management.zig:getApiKeyUsage
+GET    /health                                → handlers/health.zig:handleHealth
+
+
+For path parameters, implement a trie-based router that extracts named segments. All routes (except /health) require authentication via auth.authenticate. Routes under /websets/v0/ use the same authentication mechanism.
+
+Apply middlewares in order: logger → auth → rate_limiter → cors → handler.
+
+---
+
+ 31. MIDDLEWARE
+
+ src/middleware/logger.zig
+
+Implement structured JSON logging to stdout:
+- Log line per request: {"ts":"...","method":"...","path":"...","status":NNN,"duration_ms":NNN,"request_id":"...","team_id":"..."}.
+- Log level filtering per config (debug, info, warn, error).
+- Use std.time.nanoTimestamp() for timing.
+
+ src/middleware/cors.zig
+
+Implement CORS:
+- For OPTIONS preflight: respond 204 with Access-Control-Allow-Origin: *, Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS, Access-Control-Allow-Headers: Content-Type, x-api-key, Authorization.
+- For all other responses, add Access-Control-Allow-Origin: *.
+
+---
+
+ 32. LLM CLIENT — src/llm/
+
+ src/llm/client.zig
+
+Implement LlmClient wrapping the Anthropic API:
+- LlmClient.complete(system: ?[]const u8, user: []const u8, max_tokens: u32, allocator) ![]const u8 — calls anthropic.zig:complete.
+- LlmClient.completeJson(system: ?[]const u8, user: []const u8, schema: std.json.Value, max_tokens: u32, allocator) !std.json.Value — calls complete with instructions to output JSON matching the schema, then parses.
+- LlmClient.completeStream(system: ?[]const u8, user: []const u8, max_tokens: u32, writer: anytype) !void — streams via SSE.
+
+ src/llm/anthropic.zig
+
+Implement the Anthropic Messages API caller:
+- POST https://api.anthropic.com/v1/messages
+- Headers: x-api-key: {key}, anthropic-version: 2023-06-01, Content-Type: application/json.
+- Request body: {"model": "claude-sonnet-4-20250514", "max_tokens": N, "system": "...", "messages": [{"role": "user", "content": "..."}]}.
+- Parse response: extract content[0].text.
+- For streaming: stream: true in request, parse SSE events of types content_block_delta extracting delta.text strings, concatenate.
+- Handle overloaded_error by retrying after 5 seconds, up to 3 times.
+- Handle rate_limit_error by waiting the retry-after header value.
+
+ src/llm/streaming.zig
+
+Implement SSE stream parser for both Anthropic-style events and OpenAI-compatible chat completion chunks:
+- SseParser reads from a reader, yields SseEvent = struct { event: ?[]const u8, data: []const u8 }.
+- openAiChunkToText(chunk_json: []const u8, allocator) !?[]const u8 — parses an OpenAI chat completion chunk and returns choices[0].delta.content if present.
+
+---
+
+ 33. MCP SERVER — src/mcp/
+
+ src/mcp/server.zig
+
+Implement an HTTP server on config.mcp_listen_port that speaks the MCP (Model Context Protocol) protocol over HTTP with Server-Sent Events:
+
+- GET /mcp with Accept: text/event-stream — open an SSE stream.
+- POST /mcp — receive a JSON-RPC 2.0 call, dispatch to tools.zig, return JSON-RPC response.
+- Authentication: accept x-api-key header; also accept unauthenticated connections for the free tier (rate-limited to 3 QPS and 150 calls/day, enforced via Redis counters keyed by client IP).
+
+ src/mcp/protocol.zig
+
+Implement JSON-RPC 2.0 framing:
+- JsonRpcRequest = struct { jsonrpc: []const u8, id: std.json.Value, method: []const u8, params: ?std.json.Value }.
+- JsonRpcResponse = struct { jsonrpc: []const u8, id: std.json.Value, result: ?std.json.Value, error: ?JsonRpcError }.
+- JsonRpcError = struct { code: i32, message: []const u8, data: ?std.json.Value }.
+- parseRequest(body, allocator) !JsonRpcRequest
+- buildSuccess(id, result, allocator) ![]const u8
+- buildError(id, code, message, allocator) ![]const u8
+
+ src/mcp/tools.zig
+
+Implement the MCP tool definitions and dispatch:
+
+**Tool: web_search_exa**
+- Input schema: { "query": string, "numResults": integer (optional, default 10), "type": string (optional), "category": string (optional), "userLocation": string (optional), "includeDomains": string[] (optional), "excludeDomains": string[] (optional), "startPublishedDate": string (optional), "endPublishedDate": string (optional), "contents": object (optional) }.
+- Implementation: parse params, call SearchEngine.search, format top results as a markdown string: each result as  {title}\n**URL:** {url}\n**Published:** {date}\n\n{highlights or first 500 chars of text}\n---\n.
+- Return the formatted string as the tool result content.
+
+**Tool: web_fetch_exa**
+- Input schema: { "urls": string[], "text": boolean (optional), "highlights": boolean (optional) }.
+- Implementation: call handleContents logic, return per-URL markdown content.
+
+**Tool: web_search_advanced_exa**
+- Input schema: extends web_search_exa with additional fields: "textMaxCharacters": integer, "contextMaxCharacters": integer, "enableSummary": boolean, "summaryQuery": string, "enableHighlights": boolean, "highlightsQuery": string, "additionalQueries": string[], "maxAgeHours": integer, "livecrawlTimeout": integer, "subpages": integer, "subpageTarget": string[], "moderation": boolean.
+- Full search with all features enabled.
+
+**Tool: get_code_context_exa**
+- Input schema: { "query": string, "tokensNum": integer or "dynamic" (optional, default "dynamic") }.
+- Implementation: run a search optimized for code (include GitHub, Stack Overflow, documentation domains), retrieve text contents, truncate to tokensNum tokens (1 token ≈ 4 chars), return as a single combined text block prefixed with each result's URL.
+
+Implement tools.dispatch(method: []const u8, params: std.json.Value, auth: ?AuthContext, allocator) !std.json.Value:
+- method == "tools/list" → return the list of all tool definitions.
+- method == "tools/call" → dispatch to the named tool, return tool result.
+- method == "initialize" → return server capabilities.
+
+---
+
+ 34. HANDLERS
+
+ src/handlers/search.zig
+
+Implement handleSearch(req: HttpRequest, auth: AuthContext, state: *AppState, allocator) !HttpResponse:
+1. Parse SearchRequest from the request body.
+2. Validate: num_results must be 1–100, query must be non-empty.
+3. Validate category-specific filter restrictions.
+4. Check credit balance.
+5. Call SearchEngine.search.
+6. If req.stream = true, format as SSE and return a streaming response.
+7. Serialize SearchResponse as JSON.
+8. Return HTTP 200.
+
+Implement handleContext(req: HttpRequest, auth: AuthContext, state: *AppState, allocator) !HttpResponse:
+- Parse { "query": string, "tokensNum": integer or "dynamic" }.
+- Run a code-optimized search (include code-related domains).
+- Retrieve full text for top results.
+- Combine texts up to tokensNum tokens.
+- Return { "requestId": "...", "query": "...", "response": "...", "resultsCount": N, "costDollars": {...}, "searchTime": N, "outputTokens": N }.
+
+ src/handlers/contents.zig
+
+Implement handleContents(req: HttpRequest, auth: AuthContext, state: *AppState, allocator) !HttpResponse:
+1. Parse ContentsRequest from body.
+2. Validate urls array is non-empty (max 20 URLs).
+3. For each URL, run Freshness.resolveContent.
+4. Build ContentsResponse with per-URL results and statuses.
+5. Compute cost: sum over URLs of contentsCost(1, has_text, has_highlights, has_summary).
+6. Deduct credits.
+7. Return HTTP 200.
+
+Note: On the /contents endpoint, any URL that produces a crawl error is reported in statuses[].status = "error" with the appropriate error tag; the overall HTTP response is still 200.
+
+ src/handlers/monitors.zig
+
+Implement all monitor CRUD handlers:
+
+createMonitor:
+1. Parse CreateMonitorRequest.
+2. Validate webhook.url is HTTPS.
+3. Validate trigger.period matches pattern ^\d+[hd]$ and value ≥ 1 hour.
+4. Generate webhook_secret via crypto.generateWebhookSecret.
+5. Compute initial next_run_at from period.
+6. Insert via db_queries.createMonitor.
+7. Emit monitor.created event.
+8. Return MonitorDto with webhook_secret field populated (only in create response).
+
+triggerMonitor:
+1. Verify monitor belongs to the authenticated team.
+2. Push monitor ID to monitors:queue.
+3. Return {"triggered": true}.
+
+batchMonitors:
+1. Parse { "action": "delete"|"pause"|"unpause", "status": optional filter, "dry_run": bool (default true), "limit": int, "cursor": optional }.
+2. Find matching monitors for the team.
+3. If dry_run = true, return the list of matching monitors without modifying anything.
+4. If dry_run = false, perform the action on all matching monitors.
+5. Return { "affected": N, "has_more": bool, "next_cursor": optional }.
+
+ src/handlers/team_management.zig
+
+Implement API key management:
+
+createApiKey:
+1. Parse { "name": optional, "rateLimit": optional int, "budget_cents": optional int }.
+2. Call db_queries.createApiKey which generates the raw key, stores the hash.
+3. Return the full key (rawKey) only in this response — it is never stored in plain text and cannot be retrieved again.
+
+getApiKeyUsage:
+1. Validate start_date and end_date are within the last 180 days.
+2. Query billing_events grouped by price_type (event_type) for the given API key and date range.
+3. Return { "api_key_id": "...", "api_key_name": "...", "team_id": "...", "period": {...}, "total_cost_usd": N, "cost_breakdown": [...], "metadata": {"report_generated_at": "..."} }.
+
+ src/handlers/health.zig
+
+Implement handleHealth:
+- Check DB connection: simple SELECT 1 query.
+- Check Redis connection: PING command.
+- Return HTTP 200 {"status":"ok","db":"ok","redis":"ok"} if all pass, HTTP 503 with specific failure description otherwise.
+
+---
+
+ 35. CHAT COMPLETIONS COMPATIBILITY — src/handlers/answer.zig
+
+In addition to /answer, implement OpenAI-compatible endpoints:
+
+**POST /chat/completions**:
+- Parse { "model": string, "messages": [{role, content}], "stream": bool, ...extra_body }.
+- Extract the last user message as the query.
+- If model == "exa": call the answer logic.
+- If model == "exa-research" or "exa-research-pro": create an async research task and wait up to 60 seconds polling for completion, then return.
+- Format the response as an OpenAI chat completion: {"id":"...", "object":"chat.completion", "created":N, "model":"...", "choices":[{"index":0,"message":{"role":"assistant","content":"..."},"finish_reason":"stop"}], "usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}.
+- For streaming: emit OpenAI chat completion chunk format.
+
+**POST /responses**:
+- Parse { "model": string, "input": string or messages array }.
+- Same model dispatch as above.
+- Response format: {"id":"...","object":"response","created_at":N,"model":"...","output":[{"type":"message","id":"...","status":"completed","role":"assistant","content":[{"type":"output_text","text":"...","annotations":[]}]}],"output_text":"..."}.
+
+---
+
+ 36. MAIN ENTRY POINT — src/main.zig
+
+zig
+const std = @import("std");
+const config = @import("config.zig");
+const server = @import("server.zig");
+const db_pool = @import("db/pool.zig");
+const db_migrations = @import("db/migrations.zig");
+const redis = @import("cache/redis.zig");
+const hnsw = @import("index/hnsw.zig");
+const embeddings = @import("search/embeddings.zig");
+const llm = @import("llm/client.zig");
+const monitor_scheduler = @import("monitors/scheduler.zig");
+const monitor_runner = @import("monitors/runner.zig");
+const research_worker = @import("handlers/research.zig");
+const webset_search_worker = @import("websets/search_agent.zig");
+const webset_enrichment_worker = @import("websets/enrichment_agent.zig");
+const webhook_retry = @import("webhooks/retry.zig");
+const mcp = @import("mcp/server.zig");
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // 1. Load configuration
+    const cfg = try config.Config.load(allocator);
+
+    // 2. Connect to PostgreSQL pool
+    const pg_pool = try db_pool.Pool.init(allocator, cfg.postgres_dsn, cfg.db_pool_size);
+    defer pg_pool.deinit();
+
+    // 3. Run database migrations
+    try db_migrations.Migrations.run(&pg_pool, "sql", allocator);
+
+    // 4. Connect to Redis pool
+    const redis_pool = try redis.Pool.init(allocator, cfg.redis_url, 8);
+    defer redis_pool.deinit();
+
+    // 5. Load HNSW index
+    var hnsw_index = try hnsw.HnswIndex.load(
+        cfg.index_data_dir,
+        cfg.embedding_dim,
+        allocator,
+    );
+    defer hnsw_index.deinit();
+
+    // 6. Initialize sub-clients
+    const embedding_client = embeddings.EmbeddingClient{
+        .url = cfg.embedding_model_url,
+        .model = cfg.embedding_model_name,
+        .dim = cfg.embedding_dim,
+    };
+    const llm_client = llm.LlmClient{
+        .api_key = cfg.anthropic_api_key,
+    };
+
+    // 7. Build AppState containing all shared resources
+    var app_state = AppState{
+        .cfg = &cfg,
+        .pg_pool = &pg_pool,
+        .redis_pool = &redis_pool,
+        .hnsw_index = &hnsw_index,
+        .embedding_client = &embedding_client,
+        .llm_client = &llm_client,
+    };
+
+    // 8. Start background workers as OS threads
+    const scheduler_thread = try std.Thread.spawn(.{}, monitor_scheduler.run, .{&app_state});
+    const runner_thread = try std.Thread.spawn(.{}, monitor_runner.run, .{&app_state});
+    const research_thread = try std.Thread.spawn(.{}, research_worker.runWorker, .{&app_state});
+    const ws_search_thread = try std.Thread.spawn(.{}, webset_search_worker.run, .{&app_state});
+    const ws_enrich_thread = try std.Thread.spawn(.{}, webset_enrichment_worker.run, .{&app_state});
+    const webhook_retry_thread = try std.Thread.spawn(.{}, webhook_retry.run, .{&app_state});
+
+    // 9. Start MCP server on its own port in a background thread
+    const mcp_thread = try std.Thread.spawn(.{}, mcp.run, .{&app_state});
+
+    // 10. Start main HTTP server (blocking)
+    std.log.info("Starting server on {s}:{d}", .{cfg.listen_host, cfg.listen_port});
+    try server.Server.run(&app_state, allocator);
+
+    // Threads are detached; process exit cleans them up.
+    _ = scheduler_thread;
+    _ = runner_thread;
+    _ = research_thread;
+    _ = ws_search_thread;
+    _ = ws_enrich_thread;
+    _ = webhook_retry_thread;
+    _ = mcp_thread;
+}
+
+pub const AppState = struct {
+    cfg: *const config.Config,
+    pg_pool: *db_pool.Pool,
+    redis_pool: *redis.Pool,
+    hnsw_index: *hnsw.HnswIndex,
+    embedding_client: *embeddings.EmbeddingClient,
+    llm_client: *llm.LlmClient,
+};
+
+
+---
+
+ 37. TESTS
+
+ tests/search_test.zig
+
+Write unit tests for:
+- Query tokenization and TF-IDF scoring in highlights.zig.
+- Cosine similarity computation in hnsw.zig (verify against hand-computed examples).
+- Domain filter matching including wildcard subdomains.
+- Category-restriction validation (company category rejects date filters).
+- SearchRequest JSON parsing round-trip.
+
+ tests/contents_test.zig
+
+Write unit tests for:
+- HTML parser: verify that each conversion rule produces correct markdown output. Test each HTML tag type independently.
+- Entity decoding: test &amp;, &lt;, &8212;, &x2014;.
+- Robots.txt parser: verify that disallow rules are correctly matched against paths.
+- max_age_hours logic: test all four cases (0, -1, positive, null).
+
+ tests/monitor_test.zig
+
+Write unit tests for:
+- Period string parsing: "1h" → 3600, "7d" → 604800, invalid strings return error.
+- Next-run-at computation.
+- Deduplication: items already seen are excluded from new results.
+
+ tests/webset_test.zig
+
+Write unit tests for:
+- CSV generation from a sample set of webset items covering all entity types.
+- Enrichment result parsing for each format type.
+- Criterion evaluation caching key construction.
+
+ tests/billing_test.zig
+
+Write unit tests for:
+- Pricing.searchCost for all search types and varying num_results.
+- Pricing.contentsCost for all combinations of has_text, has_highlights, has_summary.
+- SHA-256 key hashing produces expected output for a known input.
+- HMAC-SHA256 webhook signature matches a reference value.
+- Timing-safe comparison returns correct results.
+
+---
+
+ 38. ADDITIONAL REQUIREMENTS
+
+1. **Memory management**: every allocation must have a corresponding defer allocator.free(...) or be owned by a std.ArrayList/std.StringHashMap whose deinit is deferred. Detect and report any missing deallocation paths using std.heap.GeneralPurposeAllocator with leak detection enabled in tests.
+
+2. **Error handling**: never use unreachable or @panic in production paths. Every error must propagate via Zig's !T error union return type. Errors from C library calls (libpq, hiredis, OpenSSL) must be translated into typed Zig errors with a descriptive message.
+
+3. **C interop**: all C function declarations must be in their respective source files via extern fn declarations at the top of the file (no separate header files). Every pointer received from C code must be checked for null before use.
+
+4. **Thread safety**: every shared data structure accessed from multiple threads must use std.Thread.Mutex or std.Thread.RwLock. The HNSW index uses RwLock. The DB pool and Redis pool use Mutex + semaphore as described. The webhook retry sorted set in Redis is inherently atomic.
+
+5. **Logging**: use std.log.debug, std.log.info, std.log.warn, std.log.err throughout. In production the log level is set from config. Log every incoming request, every outgoing LLM call (redact the API key), every DB query that takes > 100ms, every webhook delivery attempt and its result.
+
+6. **Graceful shutdown**: catch SIGTERM and SIGINT using std.posix.sigaction. On signal: stop accepting new connections, wait for in-flight requests to complete (with a 30-second timeout), close the DB pool, close the Redis pool, save the HNSW index to disk, exit.
+
+7. **Pagination cursors**: implement opaque cursors as base64url-encoded JSON objects {"last_id":"...","last_created_at":"..."}. Decode and use in WHERE clause as (created_at, id) < ($1, $2) for descending pagination.
+
+8. **Request ID propagation**: generate a UUID v4 request_id at the start of every request. Attach it to all log lines for that request, include it in every error response, include it in outgoing LLM and crawler calls as an X-Request-Id header.
+
+9. **JSON Schema validation**: when output_schema is provided, validate it is a well-formed JSON Schema draft-7 object before sending to the LLM. Implement a minimal validator that checks: type is a known value, properties is an object if present, required is an array of strings, nesting depth ≤ 2, total property count ≤ 10.
+
+10. **ISO 8601 date parsing and formatting**: implement parseIso8601(str) !i64 (returns Unix timestamp in milliseconds) and formatIso8601(ts_ms: i64, buf: []u8) ![]const u8 in src/utils/time.zig. Handle timezone offsets in input.
+
+All code must compile with zig build without warnings on Zig 0.14.0. The final binary must listen on the configured port, respond to all documented routes, authenticate requests, track credits, and operate all background workers without deadlocks or memory leaks under sustained load.

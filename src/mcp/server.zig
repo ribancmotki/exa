@@ -5,7 +5,6 @@ const protocol = @import("./protocol.zig");
 const tools = @import("./tools.zig");
 
 pub fn handleMcp(req: *common.HttpRequest, state: *app_state.AppState, allocator: std.mem.Allocator) !common.HttpResponse {
-    _ = state;
     const body = req.body;
 
     if (body.len == 0) {

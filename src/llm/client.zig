@@ -36,14 +36,14 @@ pub const LlmClient = struct {
         const no_headers: []const struct { name: []const u8, value: []const u8 } = &.{};
         _ = no_headers;
 
-        var full_url = try std.fmt.allocPrint(allocator, "{s}/v1/messages", .{ANTHROPIC_API_URL});
+        const full_url = try std.fmt.allocPrint(allocator, "{s}/v1/messages", .{ANTHROPIC_API_URL});
         defer allocator.free(full_url);
 
         const auth_header = try std.fmt.allocPrint(allocator, "x-api-key: {s}", .{self.api_key});
         defer allocator.free(auth_header);
 
         const c = http_client.HttpClient{ .base_url = "", .timeout_ms = 120000 };
-        var resp = c.request("POST", full_url, body_buf.items, allocator) catch |err| {
+        const resp = c.request("POST", full_url, body_buf.items, allocator) catch |err| {
             std.log.warn("LLM API call failed: {}", .{err});
             return try allocator.dupe(u8, "");
         };

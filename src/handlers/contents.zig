@@ -137,7 +137,7 @@ pub fn handleContents(req: *common.HttpRequest, auth: common.AuthContext, state:
     try sw.print("]", .{});
 
     if (total_cost_cents > 0) {
-        queries.deductTeamBalance(state.pg_pool, auth.team_id, @intCast(total_cost_cents), allocator) catch {};
+        _ = queries.deductTeamBalance(state.pg_pool, auth.team_id, @intCast(total_cost_cents), allocator) catch 0;
     }
 
     const body = try std.fmt.allocPrint(allocator,

@@ -67,14 +67,14 @@ pub fn handleAnswer(req: *common.HttpRequest, auth: common.AuthContext, state: *
     try citations_buf.appendSlice("[");
     for (search_resp.results, 0..) |r, i| {
         if (i > 0) try citations_buf.appendSlice(",");
-        try citations_buf.print("{{\"url\":\"{s}\"", .{r.url});
-        if (r.title) |t| try citations_buf.print(",\"title\":{s}", .{try jsonString(t, allocator)});
+        try citations_buf.writer().print("{{\"url\":\"{s}\"", .{r.url});
+        if (r.title) |t| try citations_buf.writer().print(",\"title\":{s}", .{try jsonString(t, allocator)});
         try citations_buf.appendSlice("}");
     }
     try citations_buf.appendSlice("]");
 
     const cost_cents = state.cfg.credit_answer_cents;
-    queries.deductTeamBalance(state.pg_pool, auth.team_id, @intCast(cost_cents), allocator) catch {};
+    _ = queries.deductTeamBalance(state.pg_pool, auth.team_id, @intCast(cost_cents), allocator) catch 0;
 
     const answer_json = try jsonString(answer_text, allocator);
     defer allocator.free(answer_json);

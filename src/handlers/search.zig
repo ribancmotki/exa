@@ -107,7 +107,7 @@ pub fn handleSearch(req: *common.HttpRequest, auth: common.AuthContext, state: *
     const search_time_ms: u64 = @intCast(@max(0, time_util.nowMillis() - start_time));
 
     const cost_cents = state.cfg.credit_search_auto_cents;
-    queries.deductTeamBalance(state.pg_pool, auth.team_id, @as(i64, cost_cents), allocator) catch {};
+    _ = queries.deductTeamBalance(state.pg_pool, auth.team_id, @as(i64, cost_cents), allocator) catch 0;
 
     var body = std.ArrayList(u8).init(allocator);
     defer body.deinit();

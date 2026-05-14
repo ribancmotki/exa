@@ -107,7 +107,7 @@ fn handleConnInner(stream: std.net.Stream, state: *app_state.AppState, allocator
         }
     }
 
-    var body_from_buf = raw[header_end + 4..];
+    const body_from_buf = raw[header_end + 4..];
     var body: []const u8 = body_from_buf;
 
     if (content_length > body_from_buf.len) {
@@ -138,7 +138,7 @@ fn handleConnInner(stream: std.net.Stream, state: *app_state.AppState, allocator
         }
     }
 
-    var req_id: [16]u8 = uuid.generate();
+    const req_id: [16]u8 = uuid.generate();
     header_map.put("x-request-id", try uuid.toString(req_id, allocator)) catch {};
 
     var req = common.HttpRequest{

@@ -288,7 +288,7 @@ pub fn getMonitor(pg_pool: *pool.Pool, id: [16]u8, team_id: [16]u8, allocator: s
     };
 }
 
-pub fn listMonitors(pg_pool: *pool.Pool, team_id: [16]u8, cursor: ?[]const u8, limit: usize, allocator: std.mem.Allocator) !common.PaginatedResult([]common.MonitorRow) {
+pub fn listMonitors(pg_pool: *pool.Pool, team_id: [16]u8, cursor: ?[]const u8, limit: usize, allocator: std.mem.Allocator) !common.PaginatedResult(common.MonitorRow) {
     _ = cursor;
     const conn = pg_pool.acquire();
     defer pg_pool.release(conn);
@@ -347,7 +347,6 @@ pub fn listDueMonitors(pg_pool: *pool.Pool, now: i64, allocator: std.mem.Allocat
     var pa = std.heap.page_allocator;
     const now_str = try std.fmt.allocPrint(pa, "{d}", .{now});
     defer pa.free(now_str);
-    _ = now_str;
     var rs = try conn.query(
         \\SELECT id, team_id, name, status, webhook_url, webhook_secret,
         \\       search_config::text, trigger_config::text,
@@ -356,9 +355,9 @@ pub fn listDueMonitors(pg_pool: *pool.Pool, now: i64, allocator: std.mem.Allocat
         \\FROM monitors
         \\WHERE status = 'active'
         \\  AND next_run_at IS NOT NULL
-        \\  AND next_run_at <= now()
+        \\  AND next_run_at <= to_timestamp($1::bigint / 1000)
         \\LIMIT 100
-    , &.{});
+    , &.{now_str});
     defer rs.deinit();
     var items = std.ArrayList(common.MonitorRow).init(pa);
     while (rs.next()) {
@@ -450,7 +449,7 @@ pub fn emitEvent(pg_pool: *pool.Pool, team_id: [16]u8, event_type: []const u8, d
     return try allocator.dupe(u8, rs.rowAt().getString(0) orelse "");
 }
 
-pub fn listEvents(pg_pool: *pool.Pool, team_id: [16]u8, cursor: ?[]const u8, limit: usize, allocator: std.mem.Allocator) !common.PaginatedResult([]common.EventRow) {
+pub fn listEvents(pg_pool: *pool.Pool, team_id: [16]u8, cursor: ?[]const u8, limit: usize, allocator: std.mem.Allocator) !common.PaginatedResult(common.EventRow) {
     _ = cursor;
     const conn = pg_pool.acquire();
     defer pg_pool.release(conn);

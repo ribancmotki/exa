@@ -9,14 +9,16 @@ pub const EmbeddingClient = struct {
     pub fn embed(self: *const EmbeddingClient, text: []const u8, allocator: std.mem.Allocator) ![]f32 {
         if (self.url.len == 0) return self.mockEmbed(text, allocator);
 
-        const body = try std.fmt.allocPrint(allocator, "{{\"model\":\"{s}\",\"prompt\":\"{s}\"}}", .{
-            self.model,
-            std.zig.fmtEscapes(text),
-        });
-        defer allocator.free(body);
-
+        var body_buf = std.ArrayList(u8).init(allocator);
+        defer body_buf.deinit();
+        try body_buf.appendSlice("{\"model\":");
+        try std.json.stringify(self.model, .{}, body_buf.writer());
+        try body_buf.appendSlice(",\"prompt\":");
+        try std.json.stringify(text, .{}, body_buf.writer());
+        try body_buf.appendSlice("}");
+        const body = body_buf.items;
         const client = http_client.HttpClient{ .base_url = "", .timeout_ms = 30000 };
-        var resp = client.request("POST", self.url, body, allocator) catch |err| {
+        const resp = client.request("POST", self.url, body, allocator) catch |err| {
             std.log.warn("Embedding API failed: {} - using mock embedding", .{err});
             return self.mockEmbed(text, allocator);
         };
@@ -75,7 +77,7 @@ pub const EmbeddingClient = struct {
     }
 
     fn mockEmbed(self: *const EmbeddingClient, text: []const u8, allocator: std.mem.Allocator) ![]f32 {
-        var embedding = try allocator.alloc(f32, self.dim);
+        const embedding = try allocator.alloc(f32, self.dim);
         var hash: u64 = 14695981039346656037;
         for (text) |c| {
             hash ^= @as(u64, c);

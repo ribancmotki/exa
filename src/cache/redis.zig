@@ -119,8 +119,8 @@ pub const Client = struct {
         @memcpy(val_buf[0..value.len], value);
         val_buf[value.len] = 0;
 
-        if (ttl_seconds) |ttl| {
-            const reply = redisCommand(self.ctx, "SETEX %s %d %s", @as([*:0]const u8, @ptrCast(&key_buf)), @as(c_int, @intCast(ttl)), @as([*:0]u8, @ptrCast(val_buf.ptr))) orelse return error.CacheError;
+        if (ttl_seconds) |ttl_secs| {
+            const reply = redisCommand(self.ctx, "SETEX %s %d %s", @as([*:0]const u8, @ptrCast(&key_buf)), @as(c_int, @intCast(ttl_secs)), @as([*:0]u8, @ptrCast(val_buf.ptr))) orelse return error.CacheError;
             defer freeReplyObject(reply);
         } else {
             const reply = redisCommand(self.ctx, "SET %s %s", @as([*:0]const u8, @ptrCast(&key_buf)), @as([*:0]u8, @ptrCast(val_buf.ptr))) orelse return error.CacheError;
@@ -258,7 +258,7 @@ pub const Pool = struct {
         while (self.available.items.len == 0) {
             self.cond.wait(&self.mutex);
         }
-        return self.available.pop();
+        return self.available.pop().?;
     }
 
     pub fn release(self: *Pool, client: *Client) void {

@@ -6,26 +6,27 @@ pub fn extract(
     max_chars: usize,
     allocator: std.mem.Allocator,
 ) ![][]const u8 {
-    var sentences = try tokenizeSentences(text, allocator);
+    const sentences = try tokenizeSentences(text, allocator);
     defer {
         for (sentences) |s| allocator.free(s);
         allocator.free(sentences);
     }
     
-    var scored_sentences = try allocator.alloc(struct { text: []const u8, score: f32 }, sentences.len);
+    const ScoredSentence = struct { text: []const u8, score: f32 };
+    var scored_sentences = try allocator.alloc(ScoredSentence, sentences.len);
     defer allocator.free(scored_sentences);
     
     for (sentences, 0..) |sentence, i| {
-        const score = if (query) |q|
+        const s = if (query) |q|
             try scoreSentence(sentence, q, allocator)
         else
             @as(f32, @floatFromInt(sentences.len - i)) * @as(f32, @floatFromInt(sentence.len));
         
-        scored_sentences[i] = .{ .text = sentence, .score = score };
+        scored_sentences[i] = .{ .text = sentence, .score = s };
     }
     
-    std.mem.sort(struct { text: []const u8, score: f32 }, scored_sentences, {}, struct {
-        fn lessThan(_: void, a: @TypeOf(scored_sentences[0]), b: @TypeOf(scored_sentences[0])) bool {
+    std.mem.sort(ScoredSentence, scored_sentences, {}, struct {
+        fn lessThan(_: void, a: ScoredSentence, b: ScoredSentence) bool {
             return a.score > b.score;
         }
     }.lessThan);
@@ -95,7 +96,7 @@ fn tokenize(text: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
     
     var word_start: ?usize = null;
     for (text, 0..) |c, i| {
-        if (c.isAlphanumeric()) {
+        if (std.ascii.isAlphanumeric(c)) {
             if (word_start == null) word_start = i;
         } else {
             if (word_start) |start| {

@@ -37,21 +37,27 @@ pub fn main() !void {
     };
 
     std.log.info("Connecting to Redis at {s}...", .{cfg.redis_url});
-    const rp = redis.Pool.init(allocator, cfg.redis_url, cfg.redis_pool_size) catch |err| {
-        std.log.warn("Failed to connect to Redis (continuing with degraded caching): {}", .{err});
+    const rp = redis.Pool.init(allocator, cfg.redis_url, cfg.redis_pool_size) catch
         redis.Pool.init(allocator, "redis://127.0.0.1:6379", 1) catch {
-            std.log.err("Cannot connect to Redis at all, exiting", .{});
-            std.process.exit(1);
-        };
-        unreachable;
+        std.log.err("Cannot connect to Redis at all, exiting", .{});
+        std.process.exit(1);
     };
     defer rp.deinit();
 
     std.log.info("Initializing HNSW vector index from {s}...", .{cfg.index_data_dir});
-    var index = hnsw.HnswIndex.load(cfg.index_data_dir, cfg.embedding_dim, allocator) catch |err| {
-        std.log.warn("Could not load HNSW index (starting empty): {}", .{err});
-        try hnsw.HnswIndex.load(cfg.index_data_dir, cfg.embedding_dim, allocator);
-        unreachable;
+    var index = hnsw.HnswIndex.load(cfg.index_data_dir, cfg.embedding_dim, allocator) catch |err| blk: {
+        std.log.warn("Could not load existing HNSW index (starting fresh): {}", .{err});
+        break :blk hnsw.HnswIndex{
+            .dim = cfg.embedding_dim,
+            .m = 16,
+            .ef_construction = 200,
+            .ef_search = 50,
+            .nodes = std.ArrayList(hnsw.HnswIndex.HnswNode).init(allocator),
+            .vectors = std.ArrayList([]f32).init(allocator),
+            .mutex = std.Thread.RwLock{},
+            .allocator = allocator,
+            .path = cfg.index_data_dir,
+        };
     };
     defer index.deinit();
 
@@ -77,11 +83,11 @@ pub fn main() !void {
         .allocator = allocator,
     };
 
-    const sched_thread = std.Thread.spawn(.{}, scheduler.Scheduler.run, .{&state}) catch |err| {
+    const sched_thread: ?std.Thread = std.Thread.spawn(.{}, scheduler.Scheduler.run, .{&state}) catch |err| blk: {
         std.log.warn("Failed to start monitor scheduler thread: {}", .{err});
-        null;
+        break :blk null;
     };
-    _ = sched_thread;
+    if (sched_thread) |t| t.detach();
 
     std.log.info("Starting HTTP server on {s}:{d}...", .{ cfg.listen_host, cfg.listen_port });
     try server.Server.run(&state, allocator);

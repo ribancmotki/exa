@@ -28,11 +28,12 @@ pub fn parseHtml(html: []const u8, allocator: std.mem.Allocator) !ParsedDocument
             
             if (std.ascii.startsWithIgnoreCase(tag, "<title>")) {
                 const content_start = i + 7;
-                const content_end = std.mem.indexOfStringIgnoreCase(html, "</title>", content_start) orelse continue;
+                const content_end = std.mem.indexOfPos(u8, html, content_start, "</title>") orelse
+                    std.mem.indexOfPos(u8, html, content_start, "</TITLE>") orelse continue;
                 const content = std.mem.trim(u8, html[content_start..content_end], " \t\n\r");
                 title = try allocator.dupe(u8, content);
-            } else if (std.ascii.containsIgnoreCase(tag, "author") or
-                std.ascii.containsIgnoreCase(tag, "article:author")) {
+            } else if (std.mem.indexOf(u8, tag, "author") != null or
+                std.mem.indexOf(u8, tag, "Author") != null) {
                 if (std.ascii.startsWithIgnoreCase(tag, "<meta")) {
                     if (std.mem.indexOfScalar(u8, tag, '"')) |_| {
                         const attr_start = std.mem.indexOfScalarPos(u8, tag, 0, '"').? + 1;
@@ -40,27 +41,29 @@ pub fn parseHtml(html: []const u8, allocator: std.mem.Allocator) !ParsedDocument
                         author = try allocator.dupe(u8, tag[attr_start..attr_end]);
                     }
                 }
-            } else if (std.ascii.containsIgnoreCase(tag, "published_time")) {
+            } else if (std.mem.indexOf(u8, tag, "published_time") != null or
+                std.mem.indexOf(u8, tag, "published_at") != null) {
                 if (std.mem.indexOfScalarPos(u8, tag, 0, '"')) |_| {
                     const attr_start = std.mem.indexOfScalarPos(u8, tag, 0, '"').? + 1;
                     const attr_end = std.mem.indexOfScalarPos(u8, tag, attr_start, '"') orelse continue;
                     published_at = try allocator.dupe(u8, tag[attr_start..attr_end]);
                 }
             } else if (std.ascii.startsWithIgnoreCase(tag, "<a ")) {
-                if (std.mem.indexOfScalarPos(u8, tag, 0, "href=\"")) |href_start| {
+                if (std.mem.indexOf(u8, tag, "href=\"")) |href_start| {
                     const url_start = href_start + 6;
                     const url_end = std.mem.indexOfScalarPos(u8, tag, url_start, '"') orelse continue;
                     const url = try allocator.dupe(u8, tag[url_start..url_end]);
                     try links.append(url);
                     
                     const text_start = tag_end + 1;
-                    const text_end = std.mem.indexOfStringIgnoreCase(html, "</a>", text_start) orelse html.len;
+                    const text_end = std.mem.indexOfPos(u8, html, text_start, "</a>") orelse
+                    std.mem.indexOfPos(u8, html, text_start, "</A>") orelse html.len;
                     const link_text = std.mem.trim(u8, html[text_start..text_end], " \t\n\r");
                     
                     try text.writer().print("[{s}]({s}) ", .{ link_text, url });
                 }
             } else if (std.ascii.startsWithIgnoreCase(tag, "<img ")) {
-                if (std.mem.indexOfScalarPos(u8, tag, 0, "src=\"")) |src_start| {
+                if (std.mem.indexOf(u8, tag, "src=\"")) |src_start| {
                     const url_start = src_start + 5;
                     const url_end = std.mem.indexOfScalarPos(u8, tag, url_start, '"') orelse continue;
                     const url = try allocator.dupe(u8, tag[url_start..url_end]);

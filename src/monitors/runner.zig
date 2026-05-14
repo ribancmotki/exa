@@ -41,7 +41,7 @@ fn runMonitorInner(state: *app_state.AppState, monitor_row: common.MonitorRow, a
         }
     }
 
-    var dummy_auth = common.AuthContext{
+    const dummy_auth = common.AuthContext{
         .api_key_id = monitor_row.team_id,
         .team_id = monitor_row.team_id,
         .team_balance_cents = 1_000_000,
@@ -76,5 +76,4 @@ fn runMonitorInner(state: *app_state.AppState, monitor_row: common.MonitorRow, a
 
     const event_data = std.json.Value{ .null = {} };
     webhooks.dispatchEvent(state.pg_pool, state.redis_pool, monitor_row.team_id, "monitor.run.completed", event_data, allocator) catch {};
-    _ = dummy_auth;
 }

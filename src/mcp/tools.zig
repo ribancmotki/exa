@@ -21,7 +21,6 @@ pub fn dispatch(method: []const u8, params: std.json.Value, auth: ?common.AuthCo
 
 fn handleWebSearch(params: std.json.Value, allocator: std.mem.Allocator) !std.json.Value {
     _ = params;
-    _ = allocator;
     var obj = std.json.ObjectMap.init(allocator);
     try obj.put("results", std.json.Value{ .array = std.json.Array.init(allocator) });
     return std.json.Value{ .object = obj };
@@ -29,7 +28,6 @@ fn handleWebSearch(params: std.json.Value, allocator: std.mem.Allocator) !std.js
 
 fn handleWebFetch(params: std.json.Value, allocator: std.mem.Allocator) !std.json.Value {
     _ = params;
-    _ = allocator;
     var obj = std.json.ObjectMap.init(allocator);
     try obj.put("results", std.json.Value{ .array = std.json.Array.init(allocator) });
     return std.json.Value{ .object = obj };

@@ -49,11 +49,11 @@ pub const HnswIndex = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        var vec_copy = try self.allocator.alloc(f32, vec.len);
+        const vec_copy = try self.allocator.alloc(f32, vec.len);
         @memcpy(vec_copy, vec);
         try self.vectors.append(vec_copy);
 
-        var node = HnswNode{
+        const node = HnswNode{
             .id = try self.allocator.dupe(u8, id),
             .level = 1,
             .neighbors = &.{},
@@ -123,8 +123,8 @@ pub fn cosineSimilarity(a: []const f32, b: []const f32) f32 {
 
     var i: usize = 0;
     while (i + vector_width <= a.len) : (i += vector_width) {
-        const va: @Vector(vector_width, f32) = a[i..i + vector_width].*;
-        const vb: @Vector(vector_width, f32) = b[i..i + vector_width].*;
+        const va: @Vector(vector_width, f32) = a[i..i + vector_width][0..vector_width].*;
+        const vb: @Vector(vector_width, f32) = b[i..i + vector_width][0..vector_width].*;
 
         dot_product += @reduce(.Add, va * vb);
         norm_a += @reduce(.Add, va * va);

@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn nowMillis() i64 {
-    return @divFloor(std.time.nanoTimestamp(), std.time.ns_per_ms);
+    return @intCast(@divFloor(std.time.nanoTimestamp(), std.time.ns_per_ms));
 }
 
 pub fn nowSeconds() i64 {

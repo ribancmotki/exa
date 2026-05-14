@@ -16,14 +16,13 @@ pub fn listApiKeys(req: *common.HttpRequest, auth: common.AuthContext, state: *a
 }
 
 pub fn createApiKey(req: *common.HttpRequest, auth: common.AuthContext, state: *app_state.AppState, allocator: std.mem.Allocator) !common.HttpResponse {
-    _ = state;
     var name: ?[]const u8 = null;
     if (req.body.len > 0) {
         const parsed = std.json.parseFromSlice(std.json.Value, allocator, req.body, .{ .allocate = .alloc_always }) catch null;
         if (parsed) |p| {
             defer p.deinit();
             if (p.value == .object) {
-                if (p.value.object.get("name")) |v| if (v == .string) name = v.string;
+                if (p.value.object.get("name")) |v| { if (v == .string) name = v.string; }
             }
         }
     }

@@ -321,7 +321,7 @@ pub const Pool = struct {
         while (self.available.items.len == 0) {
             self.cond.wait(&self.mutex);
         }
-        return self.available.pop();
+        return self.available.pop().?;
     }
 
     pub fn release(self: *Pool, conn: *Connection) void {

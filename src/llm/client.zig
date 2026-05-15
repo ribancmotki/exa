@@ -44,7 +44,7 @@ pub const LlmClient = struct {
         defer allocator.free(auth_value);
 
         const c = http_client.HttpClient{ .base_url = "", .timeout_ms = 120000 };
-        const headers = [_]struct { name: []const u8, value: []const u8 }{
+        const headers = [_]http_client.Header{
             .{ .name = "Authorization", .value = auth_value },
         };
         const resp = c.requestWithHeaders("POST", full_url, body_buf.items, &headers, allocator) catch |err| {

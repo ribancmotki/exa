@@ -46,6 +46,11 @@ fn initSsl() void {
     ssl_initialized = true;
 }
 
+pub const Header = struct {
+    name: []const u8,
+    value: []const u8,
+};
+
 pub const HttpClient = struct {
     base_url: []const u8,
     timeout_ms: u64,
@@ -96,7 +101,7 @@ pub const HttpClient = struct {
         method: []const u8,
         url: []const u8,
         body: []const u8,
-        extra_headers: []const struct { name: []const u8, value: []const u8 },
+        extra_headers: []const Header,
         allocator: std.mem.Allocator,
     ) !Response {
         initSsl();

@@ -8,7 +8,7 @@ pub const Config = struct {
     listen_port: u16,
     postgres_dsn: []const u8,
     redis_url: []const u8,
-    anthropic_api_key: []const u8,
+    cerebras_api_key: []const u8,
     embedding_model_url: []const u8,
     embedding_model_name: []const u8,
     embedding_dim: usize,
@@ -53,7 +53,7 @@ pub const Config = struct {
             .listen_port = try getEnvOrDefaultU16(&env_map, "LISTEN_PORT", 8080),
             .postgres_dsn = try getEnvRequired(&env_map, "POSTGRES_DSN", allocator),
             .redis_url = try getEnvOrDefault(&env_map, "REDIS_URL", "redis://localhost:6379", allocator),
-            .anthropic_api_key = try getEnvOrDefault(&env_map, "ANTHROPIC_API_KEY", "", allocator),
+            .cerebras_api_key = try getEnvOrDefault(&env_map, "CEREBRAS_API_KEY", "", allocator),
             .embedding_model_url = try getEnvOrDefault(&env_map, "EMBEDDING_MODEL_URL", "http://localhost:11434/api/embeddings", allocator),
             .embedding_model_name = try getEnvOrDefault(&env_map, "EMBEDDING_MODEL_NAME", "nomic-embed-text", allocator),
             .embedding_dim = try getEnvOrDefaultUsize(&env_map, "EMBEDDING_DIM", 768),
@@ -93,7 +93,7 @@ pub const Config = struct {
         self.allocator.free(self.listen_host);
         self.allocator.free(self.postgres_dsn);
         self.allocator.free(self.redis_url);
-        self.allocator.free(self.anthropic_api_key);
+        self.allocator.free(self.cerebras_api_key);
         self.allocator.free(self.embedding_model_url);
         self.allocator.free(self.embedding_model_name);
         self.allocator.free(self.reranker_url);

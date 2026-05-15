@@ -1,7 +1,7 @@
 const std = @import("std");
 const http_client = @import("../utils/http_client.zig");
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com";
+const CEREBRAS_API_URL = "https://api.cerebras.ai";
 
 pub const LlmClient = struct {
     api_key: []const u8,
@@ -21,29 +21,33 @@ pub const LlmClient = struct {
         var body_buf = std.ArrayList(u8).init(allocator);
         defer body_buf.deinit();
         const w = body_buf.writer();
-        try w.print("{{\"model\":\"{s}\",\"max_tokens\":{d},\"messages\":[{{\"role\":\"user\",\"content\":", .{ self.model, mt });
-        try std.json.stringify(user, .{}, w);
-        try w.print("}}]", .{});
+
+        try w.print("{{\"model\":\"{s}\",\"stream\":false,\"max_tokens\":{d},\"temperature\":0,\"top_p\":1,\"reasoning_effort\":\"low\",\"messages\":[", .{ self.model, mt });
+
+        var first = true;
         if (system) |sys| {
-            try w.print(",\"system\":", .{});
+            try w.print("{{\"role\":\"system\",\"content\":", .{});
             try std.json.stringify(sys, .{}, w);
+            try w.print("}}", .{});
+            first = false;
         }
-        try w.print("}}", .{});
 
-        const client = http_client.HttpClient{ .base_url = ANTHROPIC_API_URL, .timeout_ms = 120000 };
-        _ = client;
+        if (!first) try w.print(",", .{});
+        try w.print("{{\"role\":\"user\",\"content\":", .{});
+        try std.json.stringify(user, .{}, w);
+        try w.print("}}]}}", .{});
 
-        const no_headers: []const struct { name: []const u8, value: []const u8 } = &.{};
-        _ = no_headers;
-
-        const full_url = try std.fmt.allocPrint(allocator, "{s}/v1/messages", .{ANTHROPIC_API_URL});
+        const full_url = try std.fmt.allocPrint(allocator, "{s}/v1/chat/completions", .{CEREBRAS_API_URL});
         defer allocator.free(full_url);
 
-        const auth_header = try std.fmt.allocPrint(allocator, "x-api-key: {s}", .{self.api_key});
-        defer allocator.free(auth_header);
+        const auth_value = try std.fmt.allocPrint(allocator, "Bearer {s}", .{self.api_key});
+        defer allocator.free(auth_value);
 
         const c = http_client.HttpClient{ .base_url = "", .timeout_ms = 120000 };
-        const resp = c.request("POST", full_url, body_buf.items, allocator) catch |err| {
+        const headers = [_]struct { name: []const u8, value: []const u8 }{
+            .{ .name = "Authorization", .value = auth_value },
+        };
+        const resp = c.requestWithHeaders("POST", full_url, body_buf.items, &headers, allocator) catch |err| {
             std.log.warn("LLM API call failed: {}", .{err});
             return try allocator.dupe(u8, "");
         };
@@ -54,7 +58,7 @@ pub const LlmClient = struct {
             return try allocator.dupe(u8, "");
         }
 
-        return extractTextFromAnthropicResponse(resp.body, allocator);
+        return extractTextFromCerebrasResponse(resp.body, allocator);
     }
 
     pub fn completeJson(
@@ -90,7 +94,7 @@ pub const LlmClient = struct {
     }
 };
 
-fn extractTextFromAnthropicResponse(body: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+fn extractTextFromCerebrasResponse(body: []const u8, allocator: std.mem.Allocator) ![]const u8 {
     const parsed = std.json.parseFromSlice(std.json.Value, allocator, body, .{ .allocate = .alloc_always }) catch {
         return allocator.dupe(u8, "");
     };
@@ -99,18 +103,17 @@ fn extractTextFromAnthropicResponse(body: []const u8, allocator: std.mem.Allocat
     if (parsed.value != .object) return allocator.dupe(u8, "");
     const obj = parsed.value.object;
 
-    const content = obj.get("content") orelse return allocator.dupe(u8, "");
-    if (content != .array) return allocator.dupe(u8, "");
+    const choices = obj.get("choices") orelse return allocator.dupe(u8, "");
+    if (choices != .array or choices.array.items.len == 0) return allocator.dupe(u8, "");
 
-    var result = std.ArrayList(u8).init(allocator);
-    for (content.array.items) |item| {
-        if (item != .object) continue;
-        const type_val = item.object.get("type") orelse continue;
-        if (type_val != .string) continue;
-        if (!std.mem.eql(u8, type_val.string, "text")) continue;
-        const text_val = item.object.get("text") orelse continue;
-        if (text_val != .string) continue;
-        try result.appendSlice(text_val.string);
-    }
-    return result.toOwnedSlice();
+    const first = choices.array.items[0];
+    if (first != .object) return allocator.dupe(u8, "");
+
+    const message = first.object.get("message") orelse return allocator.dupe(u8, "");
+    if (message != .object) return allocator.dupe(u8, "");
+
+    const content = message.object.get("content") orelse return allocator.dupe(u8, "");
+    if (content != .string) return allocator.dupe(u8, "");
+
+    return allocator.dupe(u8, content.string);
 }

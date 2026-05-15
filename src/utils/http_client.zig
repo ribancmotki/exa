@@ -88,6 +88,17 @@ pub const HttpClient = struct {
         body: []const u8,
         allocator: std.mem.Allocator,
     ) !Response {
+        return self.requestWithHeaders(method, url, body, &.{}, allocator);
+    }
+
+    pub fn requestWithHeaders(
+        self: *const HttpClient,
+        method: []const u8,
+        url: []const u8,
+        body: []const u8,
+        extra_headers: []const struct { name: []const u8, value: []const u8 },
+        allocator: std.mem.Allocator,
+    ) !Response {
         initSsl();
         const pu = try parseUrl(url, allocator);
         defer {
@@ -130,6 +141,9 @@ pub const HttpClient = struct {
         try w.print("User-Agent: SearchPlatform/0.1\r\n", .{});
         try w.print("Content-Type: application/json\r\n", .{});
         try w.print("Content-Length: {d}\r\n", .{body.len});
+        for (extra_headers) |h| {
+            try w.print("{s}: {s}\r\n", .{ h.name, h.value });
+        }
         try w.print("Connection: close\r\n", .{});
         try w.print("\r\n", .{});
         try req_buf.appendSlice(body);

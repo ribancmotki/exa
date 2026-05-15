@@ -68,9 +68,9 @@ pub fn main() !void {
     };
 
     var llm_client = llm.LlmClient{
-        .api_key = cfg.anthropic_api_key,
-        .model = "claude-opus-4-5",
-        .max_tokens = 4096,
+        .api_key = cfg.cerebras_api_key,
+        .model = "gpt-oss-120b",
+        .max_tokens = 32768,
     };
 
     var state = app_state.AppState{
